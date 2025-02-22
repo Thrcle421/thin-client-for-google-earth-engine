@@ -1,0 +1,114 @@
+<div class="modal fade" id="authModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Earth Engine Authentication Required</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <p>To access Earth Engine data, you need to authenticate first.</p>
+                    <p>Please follow these steps:</p>
+                </div>
+                <ol class="mb-4">
+                    <li>Make sure you have a Google Earth Engine account</li>
+                    <li>Click the "Start Authentication" button below</li>
+                    <li>Complete the Google sign-in process in the popup window</li>
+                    <li>Copy the authentication code and paste it in the terminal</li>
+                    <li>After authentication is complete, click "Check Status"</li>
+                </ol>
+                <div class="alert alert-warning" id="authError" style="display: none;">
+                    <p class="mb-0"></p>
+                </div>
+                <div class="alert alert-success" id="authSuccess" style="display: none;">
+                    <p class="mb-0">Authentication successful! You can now use Earth Engine.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="startAuthBtn" onclick="startAuthentication()">
+                    Start Authentication
+                </button>
+                <button type="button" class="btn btn-success" id="checkStatusBtn" onclick="checkAuthStatus()">
+                    Check Status
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 自动显示模态框
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = new bootstrap.Modal(document.getElementById('authModal'));
+    modal.show();
+});
+
+async function startAuthentication() {
+    const startAuthBtn = document.getElementById('startAuthBtn');
+    const authError = document.getElementById('authError');
+    const authSuccess = document.getElementById('authSuccess');
+    
+    startAuthBtn.disabled = true;
+    startAuthBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Authenticating...';
+    
+    try {
+        const response = await fetch('/start-auth/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            authSuccess.style.display = 'block';
+            authError.style.display = 'none';
+            setTimeout(() => window.location.reload(), 2000);
+        } else {
+            throw new Error(data.message || 'Authentication failed');
+        }
+    } catch (error) {
+        authError.querySelector('p').textContent = error.message;
+        authError.style.display = 'block';
+        authSuccess.style.display = 'none';
+    } finally {
+        startAuthBtn.disabled = false;
+        startAuthBtn.textContent = 'Start Authentication';
+    }
+}
+
+async function checkAuthStatus() {
+    const checkStatusBtn = document.getElementById('checkStatusBtn');
+    const authError = document.getElementById('authError');
+    const authSuccess = document.getElementById('authSuccess');
+    
+    checkStatusBtn.disabled = true;
+    checkStatusBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking...';
+    
+    try {
+        const response = await fetch('/check-auth-status/', {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        const data = await response.json();
+        
+        if (data.authenticated) {
+            authSuccess.style.display = 'block';
+            authError.style.display = 'none';
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            throw new Error('Not authenticated. Please complete the authentication process.');
+        }
+    } catch (error) {
+        authError.querySelector('p').textContent = error.message;
+        authError.style.display = 'block';
+        authSuccess.style.display = 'none';
+    } finally {
+        checkStatusBtn.disabled = false;
+        checkStatusBtn.textContent = 'Check Status';
+    }
+}
+</script> 

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Earth Engine Data Downloader</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <style>
+        .dataset-search-results {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+        .dataset-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .dataset-item:hover {
+            background-color: #f8f9fa;
+        }
+        .band-tag {
+            display: inline-block;
+            background-color: #e9ecef;
+            padding: 2px 8px;
+            margin: 2px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+        .card {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid rgba(0,0,0,0.125);
+        }
+        
+        .table-sm th {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .table-sm td {
+            color: #6c757d;
+        }
+        
+        .band-info {
+            background-color: #e9ecef;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Earth Engine Data Downloader</h1>
+        
+        <!-- PRISM数据集信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ prism_metadata.title }}</h5>
+                <a href="{{ prism_metadata.documentation_url }}" target="_blank" class="btn btn-sm btn-outline-primary">Documentation</a>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Dataset Information</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Dataset ID</th>
+                                <td>{{ prism_metadata.id }}</td>
+                            </tr>
+                            <tr>
+                                <th>Availability</th>
+                                <td>{{ prism_metadata.availability }}</td>
+                            </tr>
+                            <tr>
+                                <th>Cadence</th>
+                                <td>{{ prism_metadata.cadence }}</td>
+                            </tr>
+                            <tr>
+                                <th>Provider</th>
+                                <td>{{ prism_metadata.provider }}</td>
+                            </tr>
+                            <tr>
+                                <th>Resolution</th>
+                                <td>{{ prism_metadata.resolution }}</td>
+                            </tr>
+                            <tr>
+                                <th>Update Frequency</th>
+                                <td>{{ prism_metadata.update_frequency }}</td>
+                            </tr>
+                            <tr>
+                                <th>Coverage</th>
+                                <td>{{ prism_metadata.coverage.spatial }}</td>
+                            </tr>
+                            <tr>
+                                <th>Coordinate System</th>
+                                <td>{{ prism_metadata.coverage.coordinate_system }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Available Bands</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Band</th>
+                                        <th>Description</th>
+                                        <th>Units</th>
+                                        <th>Range</th>
+                                        <th>Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for band in prism_metadata.bands %}
+                                    <tr>
+                                        <td><code>{{ band.name }}</code></td>
+                                        <td>{{ band.description }}</td>
+                                        <td>{{ band.units }}</td>
+                                        <td>{{ band.min }} to {{ band.max }}</td>
+                                        <td><small>{{ band.data_type }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Description</h6>
+                        <p>{{ prism_metadata.description }}</p>
+                        <h6>Citation</h6>
+                        <p class="text-muted"><small>{{ prism_metadata.citation }}</small></p>
+                        <p class="text-muted"><small>License: {{ prism_metadata.license }} - <a href="{{ prism_metadata.terms_of_use }}" target="_blank">Terms of Use</a></small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <form id="downloadForm" class="mt-4">
+            {% csrf_token %}
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="datasetSearch" class="form-label">Search Dataset</label>
+                        <input type="text" class="form-control" id="datasetSearch" placeholder="Search for datasets...">
+                        <div id="searchResults" class="dataset-search-results mt-2"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="selectedDataset" class="form-label">Selected Dataset</label>
+                        <input type="text" class="form-control" id="selectedDataset" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="variable" class="form-label">Available Bands</label>
+                        <select class="form-control" id="variable" required>
+                            <option value="">Select a dataset first</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="startDate" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="startDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="endDate" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="endDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exportFormat" class="form-label">Export Format</label>
+                        <select class="form-control" id="exportFormat" required>
+                            <option value="GeoTIFF">GeoTIFF</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="scale" class="form-label">Scale (meters)</label>
+                        <input type="number" class="form-control" id="scale" value="1000" required>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label">Draw Region on Map</label>
+                        <div id="map" style="height: 400px;"></div>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Download Data</button>
+        </form>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script>
+        // 初始化地图
+        let map = L.map('map').setView([39.8283, -98.5795], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        // 初始化绘图图层
+        let drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        
+        // 添加绘图控件
+        let drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems
+            },
+            draw: {
+                polygon: true,
+                rectangle: true,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                polyline: false
+            }
+        });
+        map.addControl(drawControl);
+
+        // 处理绘图事件
+        map.on('draw:created', function(e) {
+            drawnItems.clearLayers();
+            drawnItems.addLayer(e.layer);
+        });
+
+        // 添加数据集搜索功能
+        let selectedDatasetId = '';
+        const searchInput = document.getElementById('datasetSearch');
+        const searchResults = document.getElementById('searchResults');
+        const selectedDatasetInput = document.getElementById('selectedDataset');
+        const variableSelect = document.getElementById('variable');
+
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                const query = e.target.value;
+                if (query.length >= 3) {
+                    searchDatasets(query);
+                } else {
+                    searchResults.style.display = 'none';
+                }
+            }, 300);
+        });
+
+        async function searchDatasets(query) {
+            try {
+                const response = await fetch(`/search_datasets/?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (response.status === 401) {
+                    alert(data.error);
+                    return;
+                }
+                
+                displaySearchResults(data.datasets);
+            } catch (error) {
+                console.error('Error searching datasets:', error);
+                alert('Error occurred while searching datasets');
+            }
+        }
+
+        function displaySearchResults(datasets) {
+            searchResults.innerHTML = '';
+            if (datasets.length > 0) {
+                datasets.forEach(dataset => {
+                    const div = document.createElement('div');
+                    div.className = 'dataset-item';
+                    div.innerHTML = `
+                        <strong>${dataset.title}</strong><br>
+                        <small>${dataset.id}</small><br>
+                        <small>${dataset.description}</small><br>
+                        <div>
+                            ${dataset.bands.map(band => 
+                                `<span class="band-tag">${band}</span>`
+                            ).join('')}
+                        </div>
+                    `;
+                    div.addEventListener('click', () => selectDataset(dataset));
+                    searchResults.appendChild(div);
+                });
+                searchResults.style.display = 'block';
+            } else {
+                searchResults.style.display = 'none';
+            }
+        }
+
+        function selectDataset(dataset) {
+            selectedDatasetId = dataset.id;
+            selectedDatasetInput.value = `${dataset.title} (${dataset.id})`;
+            searchResults.style.display = 'none';
+            searchInput.value = '';
+            
+            // 更新可用波段
+            variableSelect.innerHTML = '';
+            dataset.bands.forEach(band => {
+                const option = document.createElement('option');
+                option.value = band;
+                option.textContent = band;
+                variableSelect.appendChild(option);
+            });
+        }
+
+        // 修改表单提交处理
+        document.getElementById('downloadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!selectedDatasetId) {
+                alert('Please select a dataset');
+                return;
+            }
+            
+            if (drawnItems.getLayers().length === 0) {
+                alert('Please draw a region on the map');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('dataset_id', selectedDatasetId);
+            formData.append('start_date', document.getElementById('startDate').value);
+            formData.append('end_date', document.getElementById('endDate').value);
+            formData.append('variable', document.getElementById('variable').value);
+            formData.append('format', document.getElementById('exportFormat').value);
+            formData.append('scale', document.getElementById('scale').value);
+            formData.append('region', JSON.stringify(drawnItems.toGeoJSON()));
+            
+            try {
+                const response = await fetch('/download/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (response.status === 401) {
+                    alert(data.error);
+                    return;
+                }
+                
+                alert(data.message);
+            } catch (error) {
+                alert('Error occurred during download');
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html> 

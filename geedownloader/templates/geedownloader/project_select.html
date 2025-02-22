@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Select Google Cloud Project</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .project-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 5px;
+        }
+        .project-card {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .project-card:hover {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="project-container">
+            <h2 class="text-center mb-4">Select Google Cloud Project</h2>
+            <p class="text-muted text-center mb-4">Please select the Google Cloud project you want to use with Earth Engine</p>
+            
+            <form method="POST" action="{% url 'select_project' %}">
+                {% csrf_token %}
+                {% for project in projects %}
+                <div class="project-card">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="project_id" 
+                               id="project_{{ project.id }}" value="{{ project.id }}" required>
+                        <label class="form-check-label" for="project_{{ project.id }}">
+                            <strong>{{ project.name }}</strong>
+                            <br>
+                            <small class="text-muted">Project ID: {{ project.id }}</small>
+                            <br>
+                            <small class="text-muted">Project Number: {{ project.number }}</small>
+                        </label>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <div class="text-center mt-4">
+                    <button type="submit" class="btn btn-primary">Continue with Selected Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html> 
