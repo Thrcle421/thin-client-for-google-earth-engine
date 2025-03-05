@@ -259,10 +259,11 @@ class GEEService:
             return {}
 
     @staticmethod
-    def search_datasets(query: str = None, tags: Optional[List[str]] = None) -> List[Dict]:
+    def search_datasets(query: str = None, tags: Optional[List[str]] = None,
+                        page: int = 1, per_page: int = 10) -> Dict[str, Any]:
         """
         Search for datasets in Earth Engine catalog using the database
-        Only search by ID (fuzzy match) and tags
+        Only search by ID (fuzzy match) and tags with pagination support
         """
         try:
             # 获取数据集查询集
@@ -277,9 +278,19 @@ class GEEService:
                 for tag in tags:
                     datasets = datasets.filter(tags__name__icontains=tag)
 
+            # 计算总数
+            total_count = datasets.count()
+
+            # 计算分页
+            start = (page - 1) * per_page
+            end = start + per_page
+
+            # 获取当前页的数据集
+            paginated_datasets = datasets[start:end]
+
             # 转换为字典列表
             results = []
-            for dataset in datasets:
+            for dataset in paginated_datasets:
                 results.append({
                     'id': dataset.id,
                     'title': dataset.title,
@@ -295,11 +306,24 @@ class GEEService:
                     'asset_url': dataset.asset_url
                 })
 
-            return results
+            # 计算总页数
+            total_pages = (total_count + per_page - 1) // per_page
+
+            return {
+                'datasets': results,
+                'total_count': total_count,
+                'total_pages': total_pages,
+                'current_page': page
+            }
 
         except Exception as e:
             print(f"Error searching datasets: {e}")
-            return []
+            return {
+                'datasets': [],
+                'total_count': 0,
+                'total_pages': 0,
+                'current_page': page
+            }
 
     @staticmethod
     def get_dataset_info(dataset_id: str) -> Optional[Dict]:

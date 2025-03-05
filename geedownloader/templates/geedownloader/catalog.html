@@ -201,6 +201,15 @@
                     </div>
                 </div>
             </template>
+
+            <!-- 在搜索结果区域下方添加分页控件 -->
+            <div class="pagination-container" id="pagination">
+                <nav aria-label="Dataset pagination">
+                    <ul class="pagination">
+                        <!-- 分页按钮将通过 JavaScript 动态生成 -->
+                    </ul>
+                </nav>
+            </div>
         </div>
     </div>
 
@@ -259,6 +268,9 @@
                     cache: true
                 }
             });
+            
+            // 页面加载时自动执行搜索，显示所有数据集
+            searchDatasets(1);
         });
 
         // 修改标签选择事件监听
@@ -274,10 +286,12 @@
             const loading = document.getElementById('loading');
             const datasetList = document.getElementById('datasetList');
             const noResults = document.getElementById('noResults');
+            const pagination = document.getElementById('pagination');
             
             loading.classList.remove('d-none');
             datasetList.innerHTML = '';
             noResults.classList.add('d-none');
+            pagination.style.display = 'none';
 
             try {
                 const params = new URLSearchParams();
@@ -286,8 +300,20 @@
                     selectedTags.forEach(tag => params.append('tags', tag));
                 }
                 params.append('page', page);
+                params.append('per_page', 10);
 
                 const response = await fetch(`/search/?${params}`);
+                
+                // 检查认证状态
+                if (response.status === 401) {
+                    const data = await response.json();
+                    if (data.auth_required) {
+                        // 加载认证模态框
+                        await loadAuthModal();
+                        return;
+                    }
+                }
+                
                 const data = await response.json();
 
                 loading.classList.add('d-none');
@@ -298,6 +324,7 @@
                 }
 
                 displayDatasets(data.datasets);
+                displayPagination(data.current_page, data.total_pages);
             } catch (error) {
                 console.error('Error searching datasets:', error);
                 loading.classList.add('d-none');
@@ -349,6 +376,133 @@
                 
                 container.appendChild(clone);
             });
+        }
+
+        // 显示分页控件
+        function displayPagination(currentPage, totalPages) {
+            const pagination = document.getElementById('pagination');
+            const paginationList = pagination.querySelector('ul.pagination');
+            
+            if (totalPages <= 1) {
+                pagination.style.display = 'none';
+                return;
+            }
+            
+            pagination.style.display = 'flex';
+            paginationList.innerHTML = '';
+            
+            // 上一页按钮
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+            const prevLink = document.createElement('a');
+            prevLink.className = 'page-link';
+            prevLink.href = '#';
+            prevLink.textContent = 'Previous';
+            if (currentPage > 1) {
+                prevLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    searchDatasets(currentPage - 1);
+                });
+            }
+            prevLi.appendChild(prevLink);
+            paginationList.appendChild(prevLi);
+            
+            // 页码按钮
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            
+            // 第一页按钮（如果需要）
+            if (startPage > 1) {
+                const firstLi = document.createElement('li');
+                firstLi.className = 'page-item';
+                const firstLink = document.createElement('a');
+                firstLink.className = 'page-link';
+                firstLink.href = '#';
+                firstLink.textContent = '1';
+                firstLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    searchDatasets(1);
+                });
+                firstLi.appendChild(firstLink);
+                paginationList.appendChild(firstLi);
+                
+                // 省略号
+                if (startPage > 2) {
+                    const ellipsisLi = document.createElement('li');
+                    ellipsisLi.className = 'page-item disabled';
+                    const ellipsisSpan = document.createElement('span');
+                    ellipsisSpan.className = 'page-link';
+                    ellipsisSpan.textContent = '...';
+                    ellipsisLi.appendChild(ellipsisSpan);
+                    paginationList.appendChild(ellipsisLi);
+                }
+            }
+            
+            // 页码
+            for (let i = startPage; i <= endPage; i++) {
+                const pageLi = document.createElement('li');
+                pageLi.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                const pageLink = document.createElement('a');
+                pageLink.className = 'page-link';
+                pageLink.href = '#';
+                pageLink.textContent = i;
+                if (i !== currentPage) {
+                    pageLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        searchDatasets(i);
+                    });
+                }
+                pageLi.appendChild(pageLink);
+                paginationList.appendChild(pageLi);
+            }
+            
+            // 最后一页按钮（如果需要）
+            if (endPage < totalPages) {
+                // 省略号
+                if (endPage < totalPages - 1) {
+                    const ellipsisLi = document.createElement('li');
+                    ellipsisLi.className = 'page-item disabled';
+                    const ellipsisSpan = document.createElement('span');
+                    ellipsisSpan.className = 'page-link';
+                    ellipsisSpan.textContent = '...';
+                    ellipsisLi.appendChild(ellipsisSpan);
+                    paginationList.appendChild(ellipsisLi);
+                }
+                
+                const lastLi = document.createElement('li');
+                lastLi.className = 'page-item';
+                const lastLink = document.createElement('a');
+                lastLink.className = 'page-link';
+                lastLink.href = '#';
+                lastLink.textContent = totalPages;
+                lastLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    searchDatasets(totalPages);
+                });
+                lastLi.appendChild(lastLink);
+                paginationList.appendChild(lastLi);
+            }
+            
+            // 下一页按钮
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+            const nextLink = document.createElement('a');
+            nextLink.className = 'page-link';
+            nextLink.href = '#';
+            nextLink.textContent = 'Next';
+            if (currentPage < totalPages) {
+                nextLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    searchDatasets(currentPage + 1);
+                });
+            }
+            nextLi.appendChild(nextLink);
+            paginationList.appendChild(nextLi);
         }
 
         // 添加输入框防抖

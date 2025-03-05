@@ -48,10 +48,9 @@ def dataset_catalog(request):
 @require_http_methods(["GET"])
 def search_datasets(request):
     """Enhanced dataset search endpoint with pagination and sorting"""
-    query = request.GET.get('query', '').lower()
+    query = request.GET.get('query', '')
     tags = request.GET.getlist('tags', None)
     page = int(request.GET.get('page', 1))
-    sort = request.GET.get('sort', 'relevance')
     per_page = int(request.GET.get('per_page', 10))
 
     if not GEEService.initialize():
@@ -62,28 +61,9 @@ def search_datasets(request):
 
     try:
         # 获取数据集列表
-        datasets = GEEService.search_datasets(query, tags)
-
-        # 应用排序
-        if sort != 'relevance':  # relevance是默认排序，由搜索结果决定
-            if sort == 'title':
-                datasets.sort(key=lambda x: x['title'].lower())
-            elif sort == 'provider':
-                datasets.sort(key=lambda x: (x['provider'] or '').lower())
-            elif sort == 'updated':
-                datasets.sort(key=lambda x: x.get(
-                    'updated_at', ''), reverse=True)
-
-        # 应用分页
-        paginator = Paginator(datasets, per_page)
-        page_obj = paginator.get_page(page)
-
-        return JsonResponse({
-            'datasets': list(page_obj),
-            'total_pages': paginator.num_pages,
-            'current_page': page,
-            'total_count': paginator.count
-        })
+        result = GEEService.search_datasets(query, tags, page, per_page)
+        
+        return JsonResponse(result)
 
     except Exception as e:
         return JsonResponse({
