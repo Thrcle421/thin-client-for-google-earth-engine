@@ -9,7 +9,7 @@ from .services import GEEService
 from django.core.paginator import Paginator
 from functools import wraps
 from django.views.decorators.csrf import ensure_csrf_cookie
-from .models import DatasetTag
+from .models import DatasetTag, DatasetMetadata
 
 
 @ensure_csrf_cookie
@@ -40,6 +40,12 @@ def start_auth(request):
         return JsonResponse(GEEService.start_authentication())
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
+
+def auth_modal_view(request):
+    """Render the authentication modal template"""
+    return render(request, 'geedownloader/auth_modal.html')
+
+
 def dataset_catalog(request):
     """Dataset catalog view with improved search and filtering"""
     return render(request, 'geedownloader/catalog.html')
@@ -53,16 +59,10 @@ def search_datasets(request):
     page = int(request.GET.get('page', 1))
     per_page = int(request.GET.get('per_page', 10))
 
-    if not GEEService.initialize():
-        return JsonResponse({
-            'error': 'Earth Engine authentication required',
-            'auth_required': True
-        }, status=401)
-
     try:
         # 获取数据集列表
         result = GEEService.search_datasets(query, tags, page, per_page)
-        
+
         return JsonResponse(result)
 
     except Exception as e:
@@ -74,11 +74,11 @@ def search_datasets(request):
 
 @require_http_methods(["GET"])
 def dataset_detail(request, dataset_id):
+    print("dataset_id1", dataset_id)
     """Enhanced dataset detail view"""
-    if not GEEService.initialize():
-        return render(request, 'geedownloader/auth_modal.html')
-
+    # 直接从 Earth Engine API 获取数据集信息
     dataset_info = GEEService.get_dataset_info(dataset_id)
+
     if not dataset_info:
         return JsonResponse({'error': 'Dataset not found'}, status=404)
 
@@ -151,19 +151,34 @@ def get_task_status(request, task_id):
 
 
 @require_http_methods(["GET"])
-@require_ee_auth
-def get_dataset_variables(request, dataset_id):
+def get_dataset_variables(request):
     """Get available variables for a dataset"""
-    variables = GEEService.get_available_variables(dataset_id)
-    return JsonResponse({'variables': variables})
+    dataset_id = request.GET.get('dataset_id')
+    if not dataset_id:
+        return JsonResponse({'error': 'Missing dataset_id parameter'}, status=400)
+
+    # 直接从 Earth Engine API 获取
+    try:
+        variables = GEEService.get_available_variables(dataset_id)
+        return JsonResponse({'variables': variables})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
-@require_ee_auth
-def get_dataset_temporal_info(request, dataset_id):
+def get_dataset_temporal_info(request):
     """Get temporal information for a dataset"""
-    info = GEEService.get_dataset_temporal_info(dataset_id)
-    return JsonResponse(info)
+    dataset_id = request.GET.get('dataset_id')
+    print("dataset_id2", dataset_id)
+    if not dataset_id:
+        return JsonResponse({'error': 'Missing dataset_id parameter'}, status=400)
+
+    # 直接从 Earth Engine API 获取
+    try:
+        info = GEEService.get_dataset_temporal_info(dataset_id)
+        return JsonResponse(info)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 def select_project(request):
@@ -266,5 +281,6 @@ def check_auth_status(request):
 def get_tags(request):
     """Get all available tags from database"""
     search_term = request.GET.get('term', '')
-    tags = DatasetTag.objects.filter(name__icontains=search_term).values('name')
+    tags = DatasetTag.objects.filter(
+        name__icontains=search_term).values('name')
     return JsonResponse(list(tags), safe=False)

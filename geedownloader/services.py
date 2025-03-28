@@ -217,46 +217,124 @@ class GEEService:
             return {'error': str(e)}
 
     @staticmethod
-    def get_available_variables(dataset_id: str) -> List[Dict[str, str]]:
+    def get_available_variables(dataset_id: str) -> List[Dict]:
         """Get available variables for a dataset"""
         try:
+            # 获取数据集信息
             info = ee.data.getInfo(dataset_id)
-            if not info or 'bands' not in info:
+            print("info", info)
+            if not info:
                 return []
 
-            return [{
-                'id': band['id'],
-                'name': band.get('name', band['id']),
-                'description': band.get('description', ''),
-                'units': band.get('units', '')
-            } for band in info['bands']]
+            # 提取波段信息
+            variables = []
 
+            # 检查是否有bands字段
+            if 'bands' in info:
+                for band in info['bands']:
+                    variables.append({
+                        'id': band.get('id', ''),
+                        'name': band.get('id', ''),
+                        'description': band.get('description', ''),
+                        'units': band.get('units', '')
+                    })
+            # 如果没有bands字段，尝试从其他字段获取信息
+            elif 'properties' in info and 'bands' in info['properties']:
+                print("info['properties']['bands']",
+                      info['properties']['bands'])
+                # 有些数据集将bands信息存储在properties中
+                for band in info['properties']['bands']:
+                    variables.append({
+                        'id': band.get('id', ''),
+                        'name': band.get('id', ''),
+                        'description': band.get('description', ''),
+                        'units': band.get('units', '')
+                    })
+            elif 'type' in info and info['type'] == 'Image':
+                # 如果是单个图像，尝试获取其波段信息
+                try:
+                    image = ee.Image(dataset_id)
+                    band_names = image.bandNames().getInfo()
+                    for band_name in band_names:
+                        variables.append({
+                            'id': band_name,
+                            'name': band_name,
+                            'description': '',
+                            'units': ''
+                        })
+                except Exception as e:
+                    print(f"Error getting band names: {e}")
+            else:
+                print(f"Asset {dataset_id} does not have bands information")
+                # 如果无法获取波段信息，返回一个默认波段
+                variables.append({
+                    'id': 'default',
+                    'name': 'Default Band',
+                    'description': 'Default band for this dataset',
+                    'units': ''
+                })
+
+            return variables
         except Exception as e:
             print(f"Error getting variables: {e}")
-            return []
+            # 发生错误时返回一个默认波段
+            return [{
+                'id': 'default',
+                'name': 'Default Band',
+                'description': 'Default band for this dataset',
+                'units': ''
+            }]
 
     @staticmethod
-    def get_dataset_temporal_info(dataset_id: str) -> Dict[str, Any]:
+    def get_dataset_temporal_info(dataset_id: str) -> Dict:
         """Get temporal information for a dataset"""
         try:
-            collection = ee.ImageCollection(dataset_id)
-            dates = collection.aggregate_array('system:time_start').getInfo()
+            # 首先尝试作为单个图像处理
+            try:
+                image = ee.Image(dataset_id)
+                date = image.get('system:time_start').getInfo()
+                if date:
+                    # 转换时间戳为日期字符串
+                    date_str = datetime.fromtimestamp(
+                        date / 1000).strftime('%Y-%m-%d')
+                    return {
+                        'start_date': date_str,
+                        'end_date': date_str
+                    }
+            except Exception as e:
+                print(f"Not a single image or error: {e}")
 
-            if not dates:
-                return {}
+            # 如果不是单个图像，尝试作为图像集合处理
+            try:
+                dataset = ee.ImageCollection(dataset_id)
+                dates = dataset.aggregate_array('system:time_start').getInfo()
 
-            start_date = datetime.fromtimestamp(min(dates) / 1000)
-            end_date = datetime.fromtimestamp(max(dates) / 1000)
+                if dates and len(dates) > 0:
+                    # 转换时间戳为日期字符串
+                    start_date = datetime.fromtimestamp(
+                        min(dates) / 1000).strftime('%Y-%m-%d')
+                    end_date = datetime.fromtimestamp(
+                        max(dates) / 1000).strftime('%Y-%m-%d')
 
+                    return {
+                        'start_date': start_date,
+                        'end_date': end_date
+                    }
+            except Exception as e:
+                print(f"Not an image collection or error: {e}")
+
+            # 如果无法获取时间信息，返回空值
             return {
-                'start_date': start_date.strftime('%Y-%m-%d'),
-                'end_date': end_date.strftime('%Y-%m-%d'),
-                'temporal_resolution': collection.first().get('temporal_resolution').getInfo()
+                'start_date': None,
+                'end_date': None
             }
-
         except Exception as e:
             print(f"Error getting temporal info: {e}")
-            return {}
+            return {
+                'start_date': None,
+                'end_date': None,
+                'error': str(e)
+            }
 
     @staticmethod
     def search_datasets(query: str = None, tags: Optional[List[str]] = None,
@@ -333,25 +411,49 @@ class GEEService:
             if not info:
                 return None
 
-            return {
+            # 构建基本的数据集信息（顶层字段）
+            dataset_info = {
                 'id': dataset_id,
-                'title': info.get('title', dataset_id),
-                'description': info.get('description', ''),
-                'provider': info.get('provider', ''),
-                'temporal_resolution': info.get('cadence', ''),
-                'spatial_resolution': info.get('resolution', ''),
-                'tags': info.get('tags', []),
-                'bands': [
-                    {
-                        'name': band['id'],
-                        'description': band.get('description', ''),
-                        'units': band.get('units', ''),
-                        'data_type': band.get('data_type', '')
-                    }
-                    for band in info.get('bands', [])
-                ],
-                'documentation_url': f'https://developers.google.com/earth-engine/datasets/catalog/{dataset_id.replace("/", "_")}'
+                'name': info.get('name', ''),
+                'type': info.get('type', ''),
+                'start_time': info.get('startTime', ''),
+                'end_time': info.get('endTime', ''),
+                'update_time': info.get('updateTime', ''),
+                'bands': [],
+                'geometry': info.get('geometry', {}),
+                'properties': {}  # 将存储所有properties内容
             }
+
+            # 如果存在properties字段，将其所有内容复制到dataset_info['properties']
+            if 'properties' in info and isinstance(info['properties'], dict):
+                dataset_info['properties'] = info['properties']
+
+                # 为了向后兼容，保留一些常用字段的直接引用
+                dataset_info['title'] = info['properties'].get(
+                    'title', dataset_id)
+                dataset_info['description'] = info['properties'].get(
+                    'description', '')
+                dataset_info['provider'] = info['properties'].get(
+                    'provider', '')
+                dataset_info['keywords'] = info['properties'].get(
+                    'keywords', [])
+                # 其他常用字段...
+
+            # 处理波段信息
+            if 'bands' in info:
+                for band in info['bands']:
+                    band_info = {
+                        'id': band.get('id', ''),
+                        'data_type': band.get('dataType', {}).get('precision', ''),
+                        'dimensions': band.get('grid', {}).get('dimensions', {}),
+                        'crs': band.get('grid', {}).get('crsWkt', ''),
+                        'transform': band.get('grid', {}).get('affineTransform', {}),
+                        'pyramiding_policy': band.get('pyramidingPolicy', ''),
+                        'range': band.get('dataType', {}).get('range', {})
+                    }
+                    dataset_info['bands'].append(band_info)
+
+            return dataset_info
 
         except Exception as e:
             print(f"Error getting dataset info: {e}")
