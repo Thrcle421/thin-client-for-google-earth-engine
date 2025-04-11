@@ -51,6 +51,17 @@
                 <h2>{{ metadata.title }}</h2>
 
                 <div class="metadata-section">
+                    <h4>Description</h4>
+                    <div id="datasetDescription">
+                        {% if metadata.description %}
+                        {{ metadata.description|safe }}
+                        {% else %}
+                        Loading description...
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="metadata-section">
                     <h4>Dataset Information</h4>
                     <table class="table">
                         <tbody>
@@ -84,6 +95,7 @@
                                 <th>Time Range</th>
                                 <td>{{ metadata.start_time }} to {{ metadata.end_time }}</td>
                             </tr>
+                            {% comment %}
                             <tr>
                                 <th>Last Updated</th>
                                 <td>{{ metadata.update_time }}</td>
@@ -94,65 +106,38 @@
                                 <td>{{ metadata.properties.period }}</td>
                             </tr>
                             {% endif %}
+                            {% endcomment %}
                         </tbody>
                     </table>
                 </div>
-
-                {% if metadata.properties.visualization_0_name %}
-                <div class="metadata-section">
-                    <h4>Visualization Parameters</h4>
-                    <table class="table">
-                        <tbody>
-                            <tr>
-                                <th>Name</th>
-                                <td>{{ metadata.properties.visualization_0_name }}</td>
-                            </tr>
-                            <tr>
-                                <th>Bands</th>
-                                <td>{{ metadata.properties.visualization_0_bands }}</td>
-                            </tr>
-                            <tr>
-                                <th>Range</th>
-                                <td>{{ metadata.properties.visualization_0_min }} to {{ metadata.properties.visualization_0_max }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                {% endif %}
 
                 <div class="metadata-section">
                     <h4>Bands Information</h4>
-                        <div class="table-responsive">
+                    <div class="table-responsive">
                         <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Band</th>
+                            <thead>
+                                <tr>
+                                    <th>Band</th>
                                     <th>Data Type</th>
                                     <th>Dimensions</th>
-                                    <th>Range</th>
-                                    <th>Pyramiding Policy</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for band in metadata.bands %}
-                                    <tr>
+                                    <th>CRS</th>
+                                    <th>CRS Transform</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for band in metadata.bands %}
+                                <tr>
                                     <td><strong>{{ band.id }}</strong></td>
                                     <td>{{ band.data_type }}</td>
-                                    <td>{{ band.dimensions.width }} x {{ band.dimensions.height }}</td>
-                                    <td>
-                                        {% if band.range.min is not None %}
-                                            {{ band.range.min }} to {{ band.range.max }}
-                                        {% else %}
-                                            0 to {{ band.range.max }}
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ band.pyramiding_policy }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                                    <td>{{ band.dimensions }}</td>
+                                    <td>{{ band.crs }}</td>
+                                    <td>{{ band.crs_transform|default:'' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
+                </div>
 
                 {% if metadata.geometry %}
                 <div class="metadata-section">
@@ -162,11 +147,11 @@
 
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const geometry = {{ metadata.geometry|safe }};
+                    const coverageGeometry = {{ metadata.geometry|safe }};
                     const coverageMap = L.map('coverage-map');
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(coverageMap);
                     
-                    const geoJsonLayer = L.geoJSON(geometry, {
+                    const geoJsonLayer = L.geoJSON(coverageGeometry, {
                         style: {
                             color: '#ff7800',
                             weight: 2,
@@ -239,6 +224,11 @@
                         <span class="badge bg-secondary me-1">{{ tag }}</span>
                         {% endfor %}
                     </div>
+                    
+                    <div id="tagsContainer" style="display: none;">
+                        <h5>Additional Tags</h5>
+                        <div id="datasetTags" class="mb-3"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -283,36 +273,182 @@
         // 加载数据集变量
         async function loadVariables() {
             try {
-                const response = await fetch(`/dataset/variables/?dataset_id={{ metadata.id }}`);
+                console.log('Fetching variables...');
+                const response = await fetch('/dataset/variables/?dataset_id={{ metadata.id }}');
                 const data = await response.json();
+                console.log('Received data:', data);
                 
+                // 检查data.variables是否存在且是数组
+                if (!data.variables) {
+                    console.error('Error: data.variables is undefined');
+                    data.variables = [];
+                }
+                
+                if (!Array.isArray(data.variables)) {
+                    console.error('Error: data.variables is not an array:', data.variables);
+                    data.variables = Array.isArray(data.variables) ? data.variables : [];
+                }
+                
+                // 显示数据集描述
+                const descElement = document.getElementById('datasetDescription');
+                console.log('Current description text:', descElement ? descElement.textContent.trim() : 'Element not found');
+                console.log('API description:', data.description);
+                
+                if (data.description && descElement) {
+                    // 如果API返回了描述且元素存在，且当前是加载中状态，则显示API的描述
+                    if (descElement.textContent.trim() === 'Loading description...') {
+                        console.log('Updating description with API data');
+                        descElement.textContent = data.description;
+                    } else {
+                        console.log('Keeping existing description');
+                    }
+                } else {
+                    console.log('No description from API or element not found');
+                }
+                
+                // 显示标签信息
+                if (data.tags && Array.isArray(data.tags) && data.tags.length > 0) {
+                    const tagsContainer = document.getElementById('datasetTags');
+                    tagsContainer.innerHTML = '';
+                    data.tags.forEach(function(tag) {
+                        const tagElem = document.createElement('span');
+                        tagElem.className = 'badge bg-secondary me-1';
+                        tagElem.textContent = tag;
+                        tagsContainer.appendChild(tagElem);
+                    });
+                    document.getElementById('tagsContainer').style.display = 'block';
+                }
+                
+                // 更新波段信息表格
+                const bandsTableBody = findBandsTable();
+                if (bandsTableBody && data.variables && data.variables.length > 0) {
+                    console.log('Found bands table, updating with:', data.variables);
+                    updateBandsTable(bandsTableBody, data.variables);
+                } else {
+                    console.log('No band information found to display or table not found');
+                }
+                
+                // 函数：查找波段信息表格
+                function findBandsTable() {
+                    console.log('Searching for bands table...');
+                    // 查找所有"Bands Information"标题
+                    const sections = document.querySelectorAll('.metadata-section');
+                    for (let i = 0; i < sections.length; i++) {
+                        const headings = sections[i].querySelectorAll('h4');
+                        for (let j = 0; j < headings.length; j++) {
+                            if (headings[j].textContent.includes('Bands Information')) {
+                                console.log('Found Bands Information section');
+                                const tbody = sections[i].querySelector('tbody');
+                                if (tbody) {
+                                    console.log('Found bands table tbody');
+                                    return tbody;
+                                }
+                            }
+                        }
+                    }
+                    console.error('Bands information table not found');
+                    return null;
+                }
+                
+                // 函数：更新波段表格
+                function updateBandsTable(tableBody, variables) {
+                    // 清空表格
+                    tableBody.innerHTML = '';
+                    
+                    // 添加每个波段的信息
+                    variables.forEach(function(band) {
+                        const row = document.createElement('tr');
+                        
+                        // 确保所有值都有默认值，避免undefined
+                        const id = band.id || '';
+                        let dataType = '';
+                        if (band.data_type) {
+                            dataType = typeof band.data_type === 'object' ? (band.data_type.precision || '') : band.data_type;
+                        }
+                        
+                        let dimensions = '';
+                        if (band.dimensions) {
+                            if (Array.isArray(band.dimensions) && band.dimensions.length >= 2) {
+                                dimensions = `${band.dimensions[0]} x ${band.dimensions[1]}`;
+                            } else {
+                                dimensions = band.dimensions;
+                            }
+                        }
+                        
+                        const crs = band.crs || '';
+                        const crsTransform = band.crs_transform || '';
+                        
+                        row.innerHTML = `
+                            <td><strong>${id}</strong></td>
+                            <td>${dataType}</td>
+                            <td>${dimensions}</td>
+                            <td>${crs}</td>
+                            <td>${crsTransform}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                }
+                
+                // 处理变量选择下拉菜单
                 const select = document.getElementById('variable');
                 select.innerHTML = '<option value="">Select a variable...</option>';
                 
                 if (!data.variables || data.variables.length === 0) {
-                    // 如果没有变量信息，添加一个默认选项
+                    console.log('No variables found, adding default option');
                     const option = document.createElement('option');
                     option.value = 'default';
                     option.textContent = 'Default Band';
                     select.appendChild(option);
                     
-                    // 显示提示信息
                     document.getElementById('variableDescription').textContent = 'No band information available for this dataset';
                     document.getElementById('variableDescription').style.display = 'block';
-                    return;
+                } else {
+                    console.log('Adding variables to select:', data.variables);
+                    data.variables.forEach(function(band) {
+                        const option = document.createElement('option');
+                        option.value = band.id || '';
+                        option.textContent = band.id || '';
+                        
+                        // 提取描述和单位
+                        let description = band.description || '';
+                        let units = band.units || '';
+                        let dataType = '';
+                        let dimensions = '';
+                        let crs = band.crs || '';
+                        let crsTransform = band.crs_transform || '';
+                        
+                        // 处理数据类型
+                        if (band.data_type) {
+                            if (typeof band.data_type === 'object') {
+                                dataType = band.data_type.precision || '';
+                            } else {
+                                dataType = band.data_type;
+                            }
+                        }
+                        
+                        // 处理维度
+                        if (band.dimensions && Array.isArray(band.dimensions) && band.dimensions.length >= 2) {
+                            dimensions = `${band.dimensions[0]} x ${band.dimensions[1]}`;
+                        } else {
+                            dimensions = band.dimensions || '';
+                        }
+                        
+                        // 设置数据属性
+                        option.setAttribute('data-description', description);
+                        option.setAttribute('data-units', units);
+                        option.setAttribute('data-data-type', dataType);
+                        option.setAttribute('data-dimensions', dimensions);
+                        option.setAttribute('data-crs', crs);
+                        option.setAttribute('data-crs-transform', crsTransform);
+                        
+                        select.appendChild(option);
+                    });
                 }
-                
-                data.variables.forEach(variable => {
-                    const option = document.createElement('option');
-                    option.value = variable.id;
-                    option.textContent = variable.name;
-                    option.dataset.description = variable.description;
-                    option.dataset.units = variable.units;
-                    select.appendChild(option);
-                });
             } catch (error) {
                 console.error('Error loading variables:', error);
-                // 发生错误时添加一个默认选项
+                console.error('Error stack:', error.stack);
+                
+                // 设置默认选项
                 const select = document.getElementById('variable');
                 select.innerHTML = '<option value="">Select a variable...</option>';
                 const option = document.createElement('option');
@@ -320,7 +456,7 @@
                 option.textContent = 'Default Band';
                 select.appendChild(option);
                 
-                document.getElementById('variableDescription').textContent = 'Error loading band information';
+                document.getElementById('variableDescription').textContent = 'Error loading band information: ' + error.message;
                 document.getElementById('variableDescription').style.display = 'block';
             }
         }
@@ -343,13 +479,26 @@
         }
 
         // 变量选择处理
-        document.getElementById('variable').addEventListener('change', function(e) {
-            const description = e.target.selectedOptions[0].dataset.description;
-            const units = e.target.selectedOptions[0].dataset.units;
+        document.getElementById('variable').addEventListener('change', function(event) {
+            const selectedOption = event.target.selectedOptions[0];
+            const description = selectedOption.getAttribute('data-description');
+            const units = selectedOption.getAttribute('data-units');
+            const dataType = selectedOption.getAttribute('data-data-type');
+            const dimensions = selectedOption.getAttribute('data-dimensions');
+            const crs = selectedOption.getAttribute('data-crs');
+            const crsTransform = selectedOption.getAttribute('data-crs-transform');
             
             const descElement = document.getElementById('variableDescription');
-            if (description || units) {
-                descElement.textContent = `${description || ''} ${units ? `(${units})` : ''}`;
+            if (description || units || dataType || dimensions || crs || crsTransform) {
+                const info = [];
+                if (description) info.push(description);
+                if (units) info.push('Units: ' + units);
+                if (dataType) info.push('Data Type: ' + dataType);
+                if (dimensions) info.push('Dimensions: ' + dimensions);
+                if (crs) info.push('CRS: ' + crs);
+                if (crsTransform) info.push('CRS Transform: ' + crsTransform);
+                
+                descElement.textContent = info.join(' | ');
                 descElement.style.display = 'block';
             } else {
                 descElement.style.display = 'none';

@@ -78,6 +78,7 @@ def dataset_detail(request, dataset_id):
     """Enhanced dataset detail view"""
     # 直接从 Earth Engine API 获取数据集信息
     dataset_info = GEEService.get_dataset_info(dataset_id)
+    print("dataset_info", dataset_info)
 
     if not dataset_info:
         return JsonResponse({'error': 'Dataset not found'}, status=404)
