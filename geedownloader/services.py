@@ -164,18 +164,29 @@ class GEEService:
             region_geom = geojson.loads(region)
             ee_geometry = ee.Geometry(region_geom['features'][0]['geometry'])
 
-            # 获取数据集
-            dataset = ee.ImageCollection(dataset_id)
-            filtered_data = dataset.filterDate(
-                start_date, end_date).select(variable)
+            # 检查数据集类型
+            image = None
+            basic_info = ee.data.getInfo(dataset_id)
 
-            # 检查是否有数据
-            if filtered_data.size().getInfo() == 0:
-                return {'error': 'No data available for the selected parameters'}
+            if basic_info and basic_info.get('type') == 'IMAGE':
+                # 单一图像
+                image = ee.Image(dataset_id).select(variable)
+            else:
+                # 影像集合
+                dataset = ee.ImageCollection(dataset_id)
+                filtered_data = dataset.filterDate(
+                    start_date, end_date).select(variable)
+
+                # 检查是否有数据
+                if filtered_data.size().getInfo() == 0:
+                    return {'error': 'No data available for the selected parameters'}
+
+                # 取平均值
+                image = filtered_data.mean()
 
             # 创建导出任务
             task = ee.batch.Export.image.toDrive(
-                image=filtered_data.mean(),
+                image=image,
                 description=f'{dataset_id.split("/")[-1]}_{variable}_{start_date}_{end_date}',
                 folder='GEE-Downloads',
                 region=ee_geometry,
@@ -195,6 +206,7 @@ class GEEService:
             }
 
         except Exception as e:
+            print(f"Error in start_download_task: {e}")
             return {'error': str(e)}
 
     @staticmethod
@@ -545,19 +557,117 @@ class GEEService:
     def validate_date_range(dataset_id: str, start_date: str, end_date: str) -> bool:
         """Validate if the selected date range is available for the dataset"""
         try:
-            dataset = ee.ImageCollection(dataset_id)
-            dates = dataset.aggregate_array('system:time_start').getInfo()
-            if not dates:
-                return False
+            # 首先尝试查看数据集类型
+            basic_info = ee.data.getInfo(dataset_id)
+            if basic_info and basic_info.get('type') == 'IMAGE':
+                print("Dataset is a single image, date range validation not needed")
+                return True  # 单一图像不需要验证日期范围
 
-            dataset_start = datetime.fromtimestamp(min(dates) / 1000)
-            dataset_end = datetime.fromtimestamp(max(dates) / 1000)
+            # 对于影像集合，获取时间范围
+            try:
+                dataset = ee.ImageCollection(dataset_id)
+                dates = dataset.aggregate_array('system:time_start').getInfo()
 
-            selected_start = datetime.strptime(start_date, '%Y-%m-%d')
-            selected_end = datetime.strptime(end_date, '%Y-%m-%d')
+                # 如果无法获取日期或日期列表为空，考虑是否这是一个非时间序列数据
+                if not dates or len(dates) == 0:
+                    print(
+                        "No dates found in dataset, assuming date validation is not applicable")
+                    return True  # 假设这个数据集不是时间序列数据，所以不需要验证日期
 
-            return dataset_start <= selected_start <= dataset_end and dataset_start <= selected_end <= dataset_end
+                dataset_start = datetime.fromtimestamp(min(dates) / 1000)
+                dataset_end = datetime.fromtimestamp(max(dates) / 1000)
+
+                selected_start = datetime.strptime(start_date, '%Y-%m-%d')
+                selected_end = datetime.strptime(end_date, '%Y-%m-%d')
+
+                print(f"Dataset date range: {dataset_start} to {dataset_end}")
+                print(
+                    f"Selected date range: {selected_start} to {selected_end}")
+
+                # 检查选定的日期范围是否在数据集的时间范围内
+                is_valid = dataset_start <= selected_end and selected_start <= dataset_end
+                print(f"Date range validation result: {is_valid}")
+                return is_valid
+            except Exception as e:
+                print(f"Error checking date range for ImageCollection: {e}")
+                # 如果出错，尝试使用单一图像
+                try:
+                    image = ee.Image(dataset_id)
+                    # 如果可以作为图像加载，不需要验证日期范围
+                    print("Dataset loaded as Image, date range validation not needed")
+                    return True
+                except Exception as img_error:
+                    print(f"Also failed to load as Image: {img_error}")
+                    # 如果所有尝试都失败，默认允许请求
+                    return True
 
         except Exception as e:
             print(f"Error validating date range: {e}")
-            return False
+            # 发生错误时，我们选择通过验证，让下一步处理可能的问题
+            return True
+
+    @staticmethod
+    def get_download_url(
+        dataset_id: str,
+        start_date: str,
+        end_date: str,
+        variable: str,
+        region: str,
+        export_format: str = 'GeoTIFF',
+        scale: int = 1000
+    ) -> Dict[str, Any]:
+        """Generate a URL for direct download of the selected dataset"""
+        try:
+            # 验证日期范围
+            if not GEEService.validate_date_range(dataset_id, start_date, end_date):
+                return {
+                    'error': 'Selected date range is not available for this dataset'
+                }
+
+            # 处理区域
+            region_geom = geojson.loads(region)
+            ee_geometry = ee.Geometry(region_geom['features'][0]['geometry'])
+
+            # 检查数据集类型
+            image = None
+            basic_info = ee.data.getInfo(dataset_id)
+
+            if basic_info and basic_info.get('type') == 'IMAGE':
+                # 单一图像
+                image = ee.Image(dataset_id).select(variable)
+            else:
+                # 影像集合
+                dataset = ee.ImageCollection(dataset_id)
+                filtered_data = dataset.filterDate(
+                    start_date, end_date).select(variable)
+
+                # 检查是否有数据
+                if filtered_data.size().getInfo() == 0:
+                    return {'error': 'No data available for the selected parameters'}
+
+                # 计算数据的平均值
+                image = filtered_data.mean()
+
+            # 获取下载URL
+            try:
+                url = image.getDownloadURL({
+                    'name': f'{dataset_id.split("/")[-1]}_{variable}_{start_date}_{end_date}',
+                    'region': ee_geometry,
+                    'scale': scale,
+                    'crs': 'EPSG:4326',
+                    'format': export_format.lower(),
+                    'maxPixels': 1e8  # Lower than toDrive limit to ensure browser can handle it
+                })
+
+                return {
+                    'success': True,
+                    'url': url,
+                    'filename': f'{dataset_id.split("/")[-1]}_{variable}_{start_date}_{end_date}.{export_format.lower()}'
+                }
+            except Exception as e:
+                print(f"Error generating download URL: {e}")
+                return {'error': f'Failed to generate download URL: {str(e)}'}
+
+        except Exception as e:
+            print(f"Error in get_download_url: {e}")
+            return {'error': str(e)}

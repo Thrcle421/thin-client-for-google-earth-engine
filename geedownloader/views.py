@@ -285,3 +285,67 @@ def get_tags(request):
     tags = DatasetTag.objects.filter(
         name__icontains=search_term).values('name')
     return JsonResponse(list(tags), safe=False)
+
+
+@require_http_methods(["POST"])
+def download_local(request):
+    """Handle local downloads by generating a direct download URL"""
+    if not GEEService.initialize():
+        return JsonResponse({
+            'error': 'Authentication required',
+            'auth_required': True
+        }, status=401)
+
+    try:
+        data = json.loads(request.body)
+
+        # Validate required parameters
+        required_fields = ['dataset_id', 'variable',
+                           'start_date', 'end_date', 'region']
+        missing_fields = [
+            field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            return JsonResponse({
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }, status=400)
+
+        # Get download URL
+        result = GEEService.get_download_url(
+            dataset_id=data['dataset_id'],
+            start_date=data['start_date'],
+            end_date=data['end_date'],
+            variable=data['variable'],
+            region=data['region'],
+            export_format=data.get('format', 'GeoTIFF'),
+            scale=int(data.get('scale', 1000))
+        )
+
+        if 'error' in result:
+            return JsonResponse({
+                'error': result['error']
+            }, status=400)
+
+        return JsonResponse(result)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'message': 'Error occurred while generating download URL'
+        }, status=500)
+
+
+@require_http_methods(["GET"])
+def get_dataset_api_variables(request, dataset_id):
+    """API endpoint to get dataset variables including description and tags"""
+    if not dataset_id:
+        return JsonResponse({'error': 'Missing dataset_id parameter'}, status=400)
+
+    try:
+        result = GEEService.get_available_variables(dataset_id)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

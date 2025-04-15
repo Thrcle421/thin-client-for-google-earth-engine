@@ -21,9 +21,12 @@ urlpatterns = [
     # Task routes
     path('validate-dates/', views.validate_dates, name='validate_dates'),
     path('download/', views.download_dataset, name='download_dataset'),
+    path('download-local/', views.download_local, name='download_local'),
     path('task-status/<str:task_id>/',
          views.get_task_status, name='get_task_status'),
 
-    # New API route
+    # New API routes
     path('api/tags/', views.get_tags, name='get_tags'),
+    path('api/dataset/<path:dataset_id>/variables/',
+         views.get_dataset_api_variables, name='get_dataset_api_variables'),
 ]

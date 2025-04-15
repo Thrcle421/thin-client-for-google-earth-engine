@@ -36,6 +36,26 @@
             color: #6c757d;
             margin-top: 5px;
         }
+        .bands-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .band-item {
+            background-color: #ffffff;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px 15px;
+            font-weight: 500;
+            color: #495057;
+            transition: all 0.2s ease;
+        }
+        .band-item:hover {
+            background-color: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
@@ -113,29 +133,16 @@
 
                 <div class="metadata-section">
                     <h4>Bands Information</h4>
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Band</th>
-                                    <th>Data Type</th>
-                                    <th>Dimensions</th>
-                                    <th>CRS</th>
-                                    <th>CRS Transform</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for band in metadata.bands %}
-                                <tr>
-                                    <td><strong>{{ band.id }}</strong></td>
-                                    <td>{{ band.data_type }}</td>
-                                    <td>{{ band.dimensions }}</td>
-                                    <td>{{ band.crs }}</td>
-                                    <td>{{ band.crs_transform|default:'' }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    <div class="bands-grid">
+                        {% for band in metadata.bands %}
+                        <div class="band-item">
+                            {{ band.id }}
+                        </div>
+                        {% empty %}
+                        <div class="band-item">
+                            No band information available
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
 
@@ -150,7 +157,7 @@
                     const coverageGeometry = {{ metadata.geometry|safe }};
                     const coverageMap = L.map('coverage-map');
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(coverageMap);
-                    
+
                     const geoJsonLayer = L.geoJSON(coverageGeometry, {
                         style: {
                             color: '#ff7800',
@@ -158,7 +165,7 @@
                             opacity: 0.65
                         }
                     }).addTo(coverageMap);
-                    
+
                     coverageMap.fitBounds(geoJsonLayer.getBounds());
                 });
                 </script>
@@ -166,7 +173,7 @@
 
                 <div class="download-form">
                     <h4>Download Data</h4>
-                    <form id="downloadForm" onsubmit="return startDownload(event)">
+                    <form id="downloadForm">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -197,13 +204,28 @@
                                     <option value="TFRecord">TFRecord</option>
                                 </select>
                             </div>
+                            <div class="mb-3">
+                                <label class="form-label">Download Method</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="downloadMethod" id="driveMethod" value="drive" checked>
+                                    <label class="form-check-label" for="driveMethod">
+                                        Google Drive Export (for large datasets)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="downloadMethod" id="localMethod" value="local">
+                                    <label class="form-check-label" for="localMethod">
+                                        Direct Download (smaller datasets)
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Select Region on Map</label>
                         <div id="map"></div>
                     </div>
-                        <button type="submit" class="btn btn-primary">Start Download</button>
+                        <button type="button" class="btn btn-primary" onclick="startDownload()">Start Download</button>
                 </form>
 
                     <div id="taskStatus" class="task-status alert">
@@ -211,6 +233,9 @@
                         <p id="taskMessage"></p>
                         <div class="progress mb-2" style="display: none;">
                             <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                        </div>
+                        <div id="downloadLink" style="display: none;">
+                            <a href="#" class="btn btn-success mt-3" target="_blank">Download File</a>
                         </div>
                     </div>
                 </div>
@@ -224,7 +249,7 @@
                         <span class="badge bg-secondary me-1">{{ tag }}</span>
                         {% endfor %}
                     </div>
-                    
+
                     <div id="tagsContainer" style="display: none;">
                         <h5>Additional Tags</h5>
                         <div id="datasetTags" class="mb-3"></div>
@@ -274,26 +299,26 @@
         async function loadVariables() {
             try {
                 console.log('Fetching variables...');
-                const response = await fetch('/dataset/variables/?dataset_id={{ metadata.id }}');
+                const response = await fetch('/api/dataset/{{ metadata.id }}/variables/');
                 const data = await response.json();
                 console.log('Received data:', data);
-                
+
                 // 检查data.variables是否存在且是数组
                 if (!data.variables) {
                     console.error('Error: data.variables is undefined');
                     data.variables = [];
                 }
-                
+
                 if (!Array.isArray(data.variables)) {
                     console.error('Error: data.variables is not an array:', data.variables);
                     data.variables = Array.isArray(data.variables) ? data.variables : [];
                 }
-                
+
                 // 显示数据集描述
                 const descElement = document.getElementById('datasetDescription');
                 console.log('Current description text:', descElement ? descElement.textContent.trim() : 'Element not found');
                 console.log('API description:', data.description);
-                
+
                 if (data.description && descElement) {
                     // 如果API返回了描述且元素存在，且当前是加载中状态，则显示API的描述
                     if (descElement.textContent.trim() === 'Loading description...') {
@@ -305,7 +330,7 @@
                 } else {
                     console.log('No description from API or element not found');
                 }
-                
+
                 // 显示标签信息
                 if (data.tags && Array.isArray(data.tags) && data.tags.length > 0) {
                     const tagsContainer = document.getElementById('datasetTags');
@@ -318,7 +343,7 @@
                     });
                     document.getElementById('tagsContainer').style.display = 'block';
                 }
-                
+
                 // 更新波段信息表格
                 const bandsTableBody = findBandsTable();
                 if (bandsTableBody && data.variables && data.variables.length > 0) {
@@ -327,10 +352,10 @@
                 } else {
                     console.log('No band information found to display or table not found');
                 }
-                
+
                 // 函数：查找波段信息表格
                 function findBandsTable() {
-                    console.log('Searching for bands table...');
+                    console.log('Searching for bands container...');
                     // 查找所有"Bands Information"标题
                     const sections = document.querySelectorAll('.metadata-section');
                     for (let i = 0; i < sections.length; i++) {
@@ -338,68 +363,54 @@
                         for (let j = 0; j < headings.length; j++) {
                             if (headings[j].textContent.includes('Bands Information')) {
                                 console.log('Found Bands Information section');
-                                const tbody = sections[i].querySelector('tbody');
-                                if (tbody) {
-                                    console.log('Found bands table tbody');
-                                    return tbody;
+                                const bandsGrid = sections[i].querySelector('.bands-grid');
+                                if (bandsGrid) {
+                                    console.log('Found bands grid container');
+                                    return bandsGrid;
                                 }
                             }
                         }
                     }
-                    console.error('Bands information table not found');
+                    console.error('Bands information container not found');
                     return null;
                 }
-                
+
                 // 函数：更新波段表格
-                function updateBandsTable(tableBody, variables) {
-                    // 清空表格
-                    tableBody.innerHTML = '';
-                    
+                function updateBandsTable(bandsContainer, variables) {
+                    // 清空容器
+                    bandsContainer.innerHTML = '';
+
                     // 添加每个波段的信息
                     variables.forEach(function(band) {
-                        const row = document.createElement('tr');
+                        const bandItem = document.createElement('div');
+                        bandItem.className = 'band-item';
                         
-                        // 确保所有值都有默认值，避免undefined
                         const id = band.id || '';
-                        let dataType = '';
-                        if (band.data_type) {
-                            dataType = typeof band.data_type === 'object' ? (band.data_type.precision || '') : band.data_type;
-                        }
+                        bandItem.innerHTML = `<strong>${id}</strong>`;
                         
-                        let dimensions = '';
-                        if (band.dimensions) {
-                            if (Array.isArray(band.dimensions) && band.dimensions.length >= 2) {
-                                dimensions = `${band.dimensions[0]} x ${band.dimensions[1]}`;
-                            } else {
-                                dimensions = band.dimensions;
-                            }
-                        }
-                        
-                        const crs = band.crs || '';
-                        const crsTransform = band.crs_transform || '';
-                        
-                        row.innerHTML = `
-                            <td><strong>${id}</strong></td>
-                            <td>${dataType}</td>
-                            <td>${dimensions}</td>
-                            <td>${crs}</td>
-                            <td>${crsTransform}</td>
-                        `;
-                        tableBody.appendChild(row);
+                        bandsContainer.appendChild(bandItem);
                     });
+                    
+                    // 如果没有波段信息，显示提示
+                    if (variables.length === 0) {
+                        const noDataItem = document.createElement('div');
+                        noDataItem.className = 'band-item';
+                        noDataItem.innerHTML = '没有可用的波段信息';
+                        bandsContainer.appendChild(noDataItem);
+                    }
                 }
-                
+
                 // 处理变量选择下拉菜单
                 const select = document.getElementById('variable');
                 select.innerHTML = '<option value="">Select a variable...</option>';
-                
+
                 if (!data.variables || data.variables.length === 0) {
                     console.log('No variables found, adding default option');
                     const option = document.createElement('option');
                     option.value = 'default';
                     option.textContent = 'Default Band';
                     select.appendChild(option);
-                    
+
                     document.getElementById('variableDescription').textContent = 'No band information available for this dataset';
                     document.getElementById('variableDescription').style.display = 'block';
                 } else {
@@ -408,7 +419,7 @@
                         const option = document.createElement('option');
                         option.value = band.id || '';
                         option.textContent = band.id || '';
-                        
+
                         // 提取描述和单位
                         let description = band.description || '';
                         let units = band.units || '';
@@ -416,7 +427,7 @@
                         let dimensions = '';
                         let crs = band.crs || '';
                         let crsTransform = band.crs_transform || '';
-                        
+
                         // 处理数据类型
                         if (band.data_type) {
                             if (typeof band.data_type === 'object') {
@@ -425,14 +436,14 @@
                                 dataType = band.data_type;
                             }
                         }
-                        
+
                         // 处理维度
                         if (band.dimensions && Array.isArray(band.dimensions) && band.dimensions.length >= 2) {
                             dimensions = `${band.dimensions[0]} x ${band.dimensions[1]}`;
                         } else {
                             dimensions = band.dimensions || '';
                         }
-                        
+
                         // 设置数据属性
                         option.setAttribute('data-description', description);
                         option.setAttribute('data-units', units);
@@ -440,14 +451,14 @@
                         option.setAttribute('data-dimensions', dimensions);
                         option.setAttribute('data-crs', crs);
                         option.setAttribute('data-crs-transform', crsTransform);
-                        
+
                         select.appendChild(option);
                     });
                 }
             } catch (error) {
                 console.error('Error loading variables:', error);
                 console.error('Error stack:', error.stack);
-                
+
                 // 设置默认选项
                 const select = document.getElementById('variable');
                 select.innerHTML = '<option value="">Select a variable...</option>';
@@ -455,7 +466,7 @@
                 option.value = 'default';
                 option.textContent = 'Default Band';
                 select.appendChild(option);
-                
+
                 document.getElementById('variableDescription').textContent = 'Error loading band information: ' + error.message;
                 document.getElementById('variableDescription').style.display = 'block';
             }
@@ -467,14 +478,51 @@
                 const response = await fetch(`/dataset/temporal-info/?dataset_id={{ metadata.id }}`);
                 const data = await response.json();
                 
+                console.log('Temporal info:', data);
+                
+                // 设置默认日期 - 使用当前日期
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                const defaultStartDate = yesterday.toISOString().split('T')[0];
+                const defaultEndDate = today.toISOString().split('T')[0];
+                
+                const startDateInput = document.getElementById('startDate');
+                const endDateInput = document.getElementById('endDate');
+                
+                // 设置默认值
+                startDateInput.value = defaultStartDate;
+                endDateInput.value = defaultEndDate;
+
                 if (data.start_date && data.end_date) {
-                    document.getElementById('startDate').min = data.start_date;
-                    document.getElementById('startDate').max = data.end_date;
-                    document.getElementById('endDate').min = data.start_date;
-                    document.getElementById('endDate').max = data.end_date;
+                    console.log(`Setting date range: ${data.start_date} to ${data.end_date}`);
+                    // 设置限制
+                    startDateInput.min = data.start_date;
+                    startDateInput.max = data.end_date;
+                    endDateInput.min = data.start_date;
+                    endDateInput.max = data.end_date;
+                    
+                    // 如果当前值在有效范围外，则设置为数据集的开始和结束日期
+                    if (startDateInput.value < data.start_date || startDateInput.value > data.end_date) {
+                        startDateInput.value = data.start_date;
+                    }
+                    
+                    if (endDateInput.value < data.start_date || endDateInput.value > data.end_date) {
+                        endDateInput.value = data.end_date;
+                    }
+                } else {
+                    console.log('No temporal info available, using default dates');
                 }
             } catch (error) {
                 console.error('Error loading temporal info:', error);
+                // 设置默认日期
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                document.getElementById('startDate').value = yesterday.toISOString().split('T')[0];
+                document.getElementById('endDate').value = today.toISOString().split('T')[0];
             }
         }
 
@@ -487,7 +535,7 @@
             const dimensions = selectedOption.getAttribute('data-dimensions');
             const crs = selectedOption.getAttribute('data-crs');
             const crsTransform = selectedOption.getAttribute('data-crs-transform');
-            
+
             const descElement = document.getElementById('variableDescription');
             if (description || units || dataType || dimensions || crs || crsTransform) {
                 const info = [];
@@ -497,7 +545,7 @@
                 if (dimensions) info.push('Dimensions: ' + dimensions);
                 if (crs) info.push('CRS: ' + crs);
                 if (crsTransform) info.push('CRS Transform: ' + crsTransform);
-                
+
                 descElement.textContent = info.join(' | ');
                 descElement.style.display = 'block';
             } else {
@@ -506,15 +554,13 @@
         });
 
         // 开始下载
-        async function startDownload(event) {
-            event.preventDefault();
-            
+        async function startDownload() {
             if (drawnItems.getLayers().length === 0) {
                 alert('Please select a region on the map');
                 return false;
             }
 
-            const form = event.target;
+            const form = document.getElementById('downloadForm');
             const data = {
                 dataset_id: '{{ metadata.id }}',
                 variable: form.variable.value,
@@ -525,8 +571,25 @@
                 region: JSON.stringify(drawnItems.toGeoJSON())
             };
 
+            const downloadMethod = document.querySelector('input[name="downloadMethod"]:checked').value;
+            const endpoint = downloadMethod === 'drive' ? '/download/' : '/download-local/';
+            
             try {
-                const response = await fetch('/download/', {
+                // 显示等待状态
+                const statusDiv = document.getElementById('taskStatus');
+                const messageDiv = document.getElementById('taskMessage');
+                statusDiv.className = 'task-status alert alert-info';
+                statusDiv.style.display = 'block';
+                messageDiv.textContent = 'Processing your download request...';
+                document.getElementById('downloadLink').style.display = 'none';
+                
+                if (downloadMethod === 'drive') {
+                    statusDiv.querySelector('.progress').style.display = 'block';
+                } else {
+                    statusDiv.querySelector('.progress').style.display = 'none';
+                }
+
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -538,15 +601,40 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showTaskStatus(result.task_id);
+                    if (downloadMethod === 'drive') {
+                        // Google Drive export - start polling for task status
+                        showTaskStatus(result.task_id);
+                    } else {
+                        // Local download - display download link
+                        showDownloadLink(result.url, result.filename);
+                    }
                 } else {
                     showError(result.error || 'Download failed');
                 }
             } catch (error) {
-                showError('Error starting download');
+                showError('Error starting download: ' + error.message);
             }
 
             return false;
+        }
+
+        // 显示下载链接
+        function showDownloadLink(url, filename) {
+            const statusDiv = document.getElementById('taskStatus');
+            const messageDiv = document.getElementById('taskMessage');
+            const downloadLinkDiv = document.getElementById('downloadLink');
+            const downloadLinkA = downloadLinkDiv.querySelector('a');
+            
+            statusDiv.className = 'task-status alert alert-success';
+            messageDiv.textContent = 'Your download is ready!';
+            
+            downloadLinkA.href = url;
+            downloadLinkA.download = filename;
+            downloadLinkA.textContent = `Download ${filename}`;
+            downloadLinkDiv.style.display = 'block';
+            
+            // 自动开始下载
+            window.open(url, '_blank');
         }
 
         // 显示任务状态
@@ -555,12 +643,12 @@
             const messageDiv = document.getElementById('taskMessage');
             const progressBar = statusDiv.querySelector('.progress');
             const progressBarInner = progressBar.querySelector('.progress-bar');
-            
+
             statusDiv.className = 'task-status alert alert-info';
             statusDiv.style.display = 'block';
             messageDiv.textContent = 'Download task started...';
             progressBar.style.display = 'block';
-            
+
             // 开始轮询任务状态
             pollTaskStatus(taskId);
         }
@@ -570,9 +658,9 @@
             try {
                 const response = await fetch(`/task-status/${taskId}/`);
                 const data = await response.json();
-                
+
                 updateTaskStatus(data);
-                
+
                 if (data.status !== 'COMPLETED' && data.status !== 'FAILED') {
                     setTimeout(() => pollTaskStatus(taskId), 5000);
                 }
@@ -586,7 +674,7 @@
             const statusDiv = document.getElementById('taskStatus');
             const messageDiv = document.getElementById('taskMessage');
             const progressBar = statusDiv.querySelector('.progress-bar');
-            
+
             switch (data.status) {
                 case 'COMPLETED':
                     statusDiv.className = 'task-status alert alert-success';
@@ -607,7 +695,7 @@
         function showError(message) {
             const statusDiv = document.getElementById('taskStatus');
             const messageDiv = document.getElementById('taskMessage');
-            
+
             statusDiv.className = 'task-status alert alert-danger';
             statusDiv.style.display = 'block';
             messageDiv.textContent = message;
@@ -620,13 +708,13 @@
             const dateInputs = document.querySelectorAll('input[type="date"]');
             dateInputs.forEach(input => {
                 input.lang = 'en';
-                
+
                 // 为旧版浏览器添加占位符
                 if (input.type !== 'date') {
                     input.placeholder = 'YYYY-MM-DD';
                 }
             });
-            
+
             // 初始化日期选择器
             flatpickr("#startDate", {
                 dateFormat: "Y-m-d",
@@ -635,7 +723,7 @@
                     firstDayOfWeek: 1
                 }
             });
-            
+
             flatpickr("#endDate", {
                 dateFormat: "Y-m-d",
                 allowInput: true,
@@ -643,7 +731,7 @@
                     firstDayOfWeek: 1
                 }
             });
-            
+
             loadVariables();
             loadTemporalInfo();
         });
