@@ -1,14 +1,6 @@
-# Earth Engine Data Explorer
+# Google Earth Engine Thin Client
 
 A Django web application for browsing, searching, and downloading data from Google Earth Engine.
-
-## Features
-
-- Browse available datasets in Google Earth Engine
-- Search datasets by name, tags, or providers
-- View detailed metadata including bands, coverage area, and temporal information
-- Download data directly or export to Google Drive
-- Visualize dataset coverage on interactive maps
 
 ## Prerequisites
 
@@ -68,6 +60,11 @@ earthengine authenticate
 
 Visit https://code.earthengine.google.com/ and find your project ID in the settings.
 
-## Configuration
+## Running the Application
 
-Create a `.env` file in the project root:
+Start the development server:
+
+```bash
+python manage.py runserver
+```
+
