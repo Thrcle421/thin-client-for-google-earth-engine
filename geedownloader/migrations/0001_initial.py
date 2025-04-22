@@ -36,13 +36,16 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     "id",
-                    models.CharField(max_length=255, primary_key=True, serialize=False),
+                    models.CharField(
+                        max_length=255, primary_key=True, serialize=False),
                 ),
                 ("title", models.CharField(max_length=255)),
                 ("description", models.TextField(blank=True)),
                 ("provider", models.CharField(blank=True, max_length=255)),
-                ("temporal_resolution", models.CharField(blank=True, max_length=100)),
-                ("spatial_resolution", models.CharField(blank=True, max_length=100)),
+                ("temporal_resolution", models.CharField(
+                    blank=True, max_length=100)),
+                ("spatial_resolution", models.CharField(
+                    blank=True, max_length=100)),
                 ("start_date", models.DateField(blank=True, null=True)),
                 ("end_date", models.DateField(blank=True, null=True)),
                 ("spatial_coverage", models.CharField(blank=True, max_length=255)),

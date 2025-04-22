@@ -60,7 +60,6 @@
     <div class="container mt-5">
         <h1>Earth Engine Data Downloader</h1>
         
-        <!-- PRISM数据集信息卡片 -->
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{{ prism_metadata.title }}</h5>
@@ -198,15 +197,12 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script>
-        // 初始化地图
         let map = L.map('map').setView([39.8283, -98.5795], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
-        // 初始化绘图图层
         let drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
         
-        // 添加绘图控件
         let drawControl = new L.Control.Draw({
             edit: {
                 featureGroup: drawnItems
@@ -222,13 +218,11 @@
         });
         map.addControl(drawControl);
 
-        // 处理绘图事件
         map.on('draw:created', function(e) {
             drawnItems.clearLayers();
             drawnItems.addLayer(e.layer);
         });
 
-        // 添加数据集搜索功能
         let selectedDatasetId = '';
         const searchInput = document.getElementById('datasetSearch');
         const searchResults = document.getElementById('searchResults');
@@ -296,7 +290,6 @@
             searchResults.style.display = 'none';
             searchInput.value = '';
             
-            // 更新可用波段
             variableSelect.innerHTML = '';
             dataset.bands.forEach(band => {
                 const option = document.createElement('option');
@@ -306,7 +299,6 @@
             });
         }
 
-        // 修改表单提交处理
         document.getElementById('downloadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             

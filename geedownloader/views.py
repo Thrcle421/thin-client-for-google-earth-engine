@@ -60,7 +60,6 @@ def search_datasets(request):
     per_page = int(request.GET.get('per_page', 10))
 
     try:
-        # 获取数据集列表
         result = GEEService.search_datasets(query, tags, page, per_page)
 
         return JsonResponse(result)
@@ -76,7 +75,6 @@ def search_datasets(request):
 def dataset_detail(request, dataset_id):
     print("dataset_id1", dataset_id)
     """Enhanced dataset detail view"""
-    # 直接从 Earth Engine API 获取数据集信息
     dataset_info = GEEService.get_dataset_info(dataset_id)
     print("dataset_info", dataset_info)
 
@@ -158,7 +156,6 @@ def get_dataset_variables(request):
     if not dataset_id:
         return JsonResponse({'error': 'Missing dataset_id parameter'}, status=400)
 
-    # 直接从 Earth Engine API 获取
     try:
         variables = GEEService.get_available_variables(dataset_id)
         return JsonResponse({'variables': variables})
@@ -174,7 +171,6 @@ def get_dataset_temporal_info(request):
     if not dataset_id:
         return JsonResponse({'error': 'Missing dataset_id parameter'}, status=400)
 
-    # 直接从 Earth Engine API 获取
     try:
         info = GEEService.get_dataset_temporal_info(dataset_id)
         return JsonResponse(info)
@@ -204,7 +200,6 @@ def download_dataset(request):
     try:
         data = json.loads(request.body)
 
-        # Validate required parameters
         required_fields = ['dataset_id', 'variable',
                            'start_date', 'end_date', 'region']
         missing_fields = [
@@ -214,7 +209,6 @@ def download_dataset(request):
                 'error': f'Missing required fields: {", ".join(missing_fields)}'
             }, status=400)
 
-        # Validate date range
         if not GEEService.validate_date_range(
             data['dataset_id'],
             data['start_date'],

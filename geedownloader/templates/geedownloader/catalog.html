@@ -48,7 +48,6 @@
         .sort-controls {
             margin-bottom: 15px;
         }
-        /* 搜索框样式 */
         .search-input-container {
             margin-bottom: 1rem;
         }
@@ -63,7 +62,6 @@
             box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
             outline: none;
         }
-        /* Select2 自定义样式 */
         .select2-container--default .select2-selection--multiple {
             border: 1px solid #ced4da;
             min-height: 38px;
@@ -96,7 +94,6 @@
         .select2-results__option--highlighted[aria-selected] {
             background-color: #0d6efd;
         }
-        /* Select2 下拉菜单样式 */
         .select2-container--default .select2-results > .select2-results__options {
             max-height: 200px;
             overflow-y: auto;
@@ -153,25 +150,20 @@
                 </div>
             </div>
 
-            <!-- 搜索结果区域 -->
             <div class="row" id="datasetList">
-                <!-- 数据集卡片将在这里动态添加 -->
             </div>
 
-            <!-- 加载指示器 -->
             <div id="loading" class="loading d-none">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
             </div>
             
-            <!-- 无结果提示 -->
             <div id="noResults" class="no-results d-none">
                 <h4>No datasets found</h4>
                 <p>Try different keywords or remove some filters</p>
             </div>
 
-            <!-- 数据集卡片模板 -->
             <template id="datasetCardTemplate">
                 <div class="col-md-6 mb-4">
                     <div class="card h-100">
@@ -197,11 +189,9 @@
                 </div>
             </template>
 
-            <!-- 在搜索结果区域下方添加分页控件 -->
             <div class="pagination-container" id="pagination">
                 <nav aria-label="Dataset pagination">
                     <ul class="pagination">
-                        <!-- 分页按钮将通过 JavaScript 动态生成 -->
                     </ul>
                 </nav>
             </div>
@@ -211,13 +201,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
-        // 初始化 Select2
         $(document).ready(function() {
             $('#tagSelect').select2({
-                tags: false,  // 禁用创建新标签
+                tags: false,  
                 placeholder: 'Search available tags',
                 allowClear: true,
-                minimumInputLength: 1,  // 至少输入1个字符才开始搜索
+                minimumInputLength: 1,  
                 ajax: {
                     url: '/api/tags/',
                     dataType: 'json',
@@ -240,16 +229,13 @@
                 }
             });
             
-            // 页面加载时自动执行搜索，显示所有数据集
             searchDatasets(1);
         });
 
-        // 修改标签选择事件监听
         $('#tagSelect').on('change', function() {
             searchDatasets(1);
         });
 
-        // 搜索函数
         async function searchDatasets(page = 1) {
             const query = document.getElementById('searchInput').value;
             const selectedTags = $('#tagSelect').val() || [];
@@ -307,7 +293,6 @@
             datasets.forEach(dataset => {
                 const clone = template.content.cloneNode(true);
                 
-                // 设置缩略图
                 const thumbnail = clone.querySelector('.dataset-thumbnail');
                 if (dataset.thumbnail_url) {
                     thumbnail.src = dataset.thumbnail_url;
@@ -315,11 +300,9 @@
                     thumbnail.src = '/static/images/no-image.png';
                 }
                 
-                // 设置标题和描述
                 clone.querySelector('.dataset-title').textContent = dataset.title || dataset.id;
                 clone.querySelector('.dataset-description').textContent = dataset.description || 'No description available';
                 
-                // 设置标签
                 const tagsContainer = clone.querySelector('.dataset-tags');
                 if (dataset.tags && dataset.tags.length > 0) {
                     dataset.tags.forEach(tag => {
@@ -330,7 +313,6 @@
                     });
                 }
                 
-                // 设置提供者和日期
                 const providerDiv = clone.querySelector('.dataset-provider');
                 if (dataset.provider) {
                     providerDiv.textContent = `Provider: ${dataset.provider}`;
@@ -345,7 +327,6 @@
                     datesDiv.style.display = 'none';
                 }
                 
-                // 设置详情链接
                 const detailLink = clone.querySelector('.dataset-link');
                 detailLink.href = `/dataset/${encodeURIComponent(dataset.id)}/`;
                 
@@ -353,7 +334,6 @@
             });
         }
 
-        // 显示分页控件
         function displayPagination(currentPage, totalPages) {
             const pagination = document.getElementById('pagination');
             const paginationList = pagination.querySelector('ul.pagination');
@@ -366,7 +346,6 @@
             pagination.style.display = 'flex';
             paginationList.innerHTML = '';
             
-            // 上一页按钮
             const prevLi = document.createElement('li');
             prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
             const prevLink = document.createElement('a');
@@ -382,7 +361,6 @@
             prevLi.appendChild(prevLink);
             paginationList.appendChild(prevLi);
             
-            // 页码按钮
             const maxVisiblePages = 5;
             let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
             let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
@@ -391,7 +369,6 @@
                 startPage = Math.max(1, endPage - maxVisiblePages + 1);
             }
             
-            // 第一页按钮（如果需要）
             if (startPage > 1) {
                 const firstLi = document.createElement('li');
                 firstLi.className = 'page-item';
@@ -406,7 +383,6 @@
                 firstLi.appendChild(firstLink);
                 paginationList.appendChild(firstLi);
                 
-                // 省略号
                 if (startPage > 2) {
                     const ellipsisLi = document.createElement('li');
                     ellipsisLi.className = 'page-item disabled';
@@ -418,7 +394,6 @@
                 }
             }
             
-            // 页码
             for (let i = startPage; i <= endPage; i++) {
                 const pageLi = document.createElement('li');
                 pageLi.className = `page-item ${i === currentPage ? 'active' : ''}`;
@@ -436,9 +411,7 @@
                 paginationList.appendChild(pageLi);
             }
             
-            // 最后一页按钮（如果需要）
             if (endPage < totalPages) {
-                // 省略号
                 if (endPage < totalPages - 1) {
                     const ellipsisLi = document.createElement('li');
                     ellipsisLi.className = 'page-item disabled';
@@ -463,7 +436,6 @@
                 paginationList.appendChild(lastLi);
             }
             
-            // 下一页按钮
             const nextLi = document.createElement('li');
             nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
             const nextLink = document.createElement('a');
@@ -480,7 +452,6 @@
             paginationList.appendChild(nextLi);
         }
 
-        // 添加输入框防抖
         let searchTimeout;
         document.getElementById('searchInput').addEventListener('input', (e) => {
             clearTimeout(searchTimeout);

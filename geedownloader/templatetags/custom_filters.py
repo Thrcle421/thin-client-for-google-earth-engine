@@ -12,4 +12,4 @@ def timestamp_to_date(timestamp):
     try:
         return datetime.fromtimestamp(timestamp / 1000).strftime('%Y-%m-%d')
     except (ValueError, TypeError):
-        return timestamp  # 返回原始值如果转换失败
+        return timestamp

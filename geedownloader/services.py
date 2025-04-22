@@ -15,7 +15,6 @@ from django.db.models import Q
 class GEEService:
     """Provides methods for interacting with Google Earth Engine API"""
 
-    # 添加类变量来存储 project_id
     _project_id = None
 
     @classmethod
@@ -93,7 +92,6 @@ class GEEService:
 
             try:
                 ee.Initialize(project=project_id)
-                # 认证成功后保存 project_id
                 GEEService.set_project_id(project_id)
 
                 test = ee.Number(1).add(2)
@@ -154,56 +152,87 @@ class GEEService:
     ) -> Dict[str, Any]:
         """Start a download task for the specified dataset"""
         try:
-            # 验证日期范围
+
+            access_check = GEEService.check_dataset_access(dataset_id)
+            if not access_check['success']:
+                return {'error': access_check.get('message', access_check['error'])}
+
+            basic_info = access_check['info']
+
             if not GEEService.validate_date_range(dataset_id, start_date, end_date):
                 return {
                     'error': 'Selected date range is not available for this dataset'
                 }
 
-            # 处理区域
-            region_geom = geojson.loads(region)
-            ee_geometry = ee.Geometry(region_geom['features'][0]['geometry'])
+            try:
+                region_geom = geojson.loads(region)
+                ee_geometry = ee.Geometry(
+                    region_geom['features'][0]['geometry'])
+            except Exception as e:
+                print(f"Error parsing region geometry: {e}")
+                return {'error': f"Invalid region format: {str(e)}"}
 
-            # 检查数据集类型
             image = None
-            basic_info = ee.data.getInfo(dataset_id)
+            dataset_type = basic_info.get('type', '')
 
-            if basic_info and basic_info.get('type') == 'IMAGE':
-                # 单一图像
-                image = ee.Image(dataset_id).select(variable)
+            if dataset_type == 'IMAGE':
+                try:
+                    image = ee.Image(dataset_id).select(variable)
+                except Exception as e:
+                    print(f"Error selecting variable from image: {e}")
+                    return {'error': f"Failed to select variable '{variable}' from image: {str(e)}"}
             else:
-                # 影像集合
-                dataset = ee.ImageCollection(dataset_id)
-                filtered_data = dataset.filterDate(
-                    start_date, end_date).select(variable)
+                try:
+                    dataset = ee.ImageCollection(dataset_id)
+                    filtered_data = dataset.filterDate(
+                        start_date, end_date).select(variable)
 
-                # 检查是否有数据
-                if filtered_data.size().getInfo() == 0:
-                    return {'error': 'No data available for the selected parameters'}
+                    collection_size = filtered_data.size().getInfo()
+                    if collection_size == 0:
+                        return {'error': 'No data available for the selected parameters'}
 
-                # 取平均值
-                image = filtered_data.mean()
+                    print(f"Found {collection_size} images matching criteria")
 
-            # 创建导出任务
-            task = ee.batch.Export.image.toDrive(
-                image=image,
-                description=f'{dataset_id.split("/")[-1]}_{variable}_{start_date}_{end_date}',
-                folder='GEE-Downloads',
-                region=ee_geometry,
-                scale=scale,
-                crs='EPSG:4326',
-                fileFormat=export_format,
-                maxPixels=1e13
-            )
+                    image = filtered_data.mean()
+                except Exception as e:
+                    print(f"Error processing image collection: {e}")
+                    return {'error': f"Failed to process image collection: {str(e)}"}
 
-            # 启动任务
-            task.start()
+            try:
+                if isinstance(dataset_id, str) and '/' in dataset_id:
+                    filename_base = dataset_id.split('/')[-1]
+                else:
+                    filename_base = str(dataset_id).replace('/', '_')
 
-            return {
-                'task_id': task.id,
-                'status': 'STARTED',
-                'description': task.config['description']
-            }
+                output_name = f'{filename_base}_{variable}_{start_date}_{end_date}'
+            except Exception as e:
+                print(f"Error formatting output name: {e}")
+                output_name = f'earthengine_export_{variable}'
+
+            try:
+                task = ee.batch.Export.image.toDrive(
+                    image=image,
+                    description=output_name,
+                    folder='GEE-Downloads',
+                    region=ee_geometry,
+                    scale=scale,
+                    crs='EPSG:4326',
+                    fileFormat=export_format,
+                    maxPixels=1e13
+                )
+
+                task.start()
+
+                print(f"Successfully started export task with ID: {task.id}")
+
+                return {
+                    'task_id': task.id,
+                    'status': 'STARTED',
+                    'description': task.config['description']
+                }
+            except Exception as e:
+                print(f"Error creating or starting export task: {e}")
+                return {'error': f'Failed to start export task: {str(e)}'}
 
         except Exception as e:
             print(f"Error in start_download_task: {e}")
@@ -234,56 +263,59 @@ class GEEService:
         try:
             print(f"\n=== Getting variables for dataset: {dataset_id} ===")
 
-            # 获取数据集的基本信息
-            basic_info = ee.data.getInfo(dataset_id)
-            print(f"Basic info type: {type(basic_info)}")
-
-            if not basic_info:
-                print("Error: Could not get basic info from ee.data.getInfo()")
+            access_check = GEEService.check_dataset_access(dataset_id)
+            if not access_check['success']:
+                error_message = access_check.get(
+                    'message', access_check['error'])
+                print(f"Access error: {error_message}")
                 return {
-                    'variables': [],
-                    'description': '',
+                    'variables': [{
+                        'id': 'default',
+                        'name': 'Default Band',
+                        'description': f'Error accessing dataset: {error_message}'
+                    }],
+                    'description': f'Error: {error_message}',
                     'tags': [],
-                    'title': dataset_id
+                    'title': dataset_id,
+                    'error': error_message
                 }
 
-            # 获取描述信息
+            basic_info = access_check['info']
+            print(f"Basic info type: {type(basic_info)}")
+
             description = basic_info.get('description', '')
             if not description and 'properties' in basic_info:
                 description = basic_info['properties'].get('description', '')
 
-            # 获取标题
             title = basic_info.get('title', '')
             if not title and 'properties' in basic_info:
                 title = basic_info['properties'].get('title', '')
 
-            # 获取标签
             tags = []
             if 'keywords' in basic_info:
                 tags.extend(basic_info['keywords'])
             if 'properties' in basic_info and 'keywords' in basic_info['properties']:
                 tags.extend(basic_info['properties']['keywords'])
-            tags = list(set(tags))  # 去重
+            tags = list(set(tags))
 
-            # 获取波段信息
             bands_info = basic_info.get('bands', [])
             print(f"\nOriginal bands_info from basic_info: {bands_info}")
 
             if not bands_info and basic_info.get('type') == 'IMAGE_COLLECTION':
-                # 对于影像集合，尝试从第一个影像获取波段信息
                 print("\nTrying to get bands from first image of collection...")
-                first_image = ee.ImageCollection(dataset_id).first()
-                first_image_info = first_image.getInfo()
-                bands_info = first_image_info.get('bands', [])
-                print(f"Bands info from first image: {bands_info}")
+                try:
+                    first_image = ee.ImageCollection(dataset_id).first()
+                    first_image_info = first_image.getInfo()
+                    bands_info = first_image_info.get('bands', [])
+                    print(f"Bands info from first image: {bands_info}")
+                except Exception as e:
+                    print(f"Error getting bands from first image: {e}")
 
-            # 确保bands_info是一个列表
             if not isinstance(bands_info, list):
                 print(
                     f"\nWarning: bands_info is not a list, it's a {type(bands_info)}")
                 bands_info = []
 
-            # 如果没有获取到任何波段信息，返回默认波段
             if not bands_info:
                 print(f"\nNo bands found for {dataset_id}, returning default")
                 bands_info = [{
@@ -301,6 +333,34 @@ class GEEService:
             }
             print(f"\nFinal response: {result}")
             return result
+
+        except ee.ee_exception.EEException as e:
+            error_msg = str(e)
+            print(f"Earth Engine API error: {error_msg}")
+            if "permission" in error_msg.lower():
+                return {
+                    'variables': [{
+                        'id': 'default',
+                        'name': 'Default Band',
+                        'description': f'Permission error: {error_msg}'
+                    }],
+                    'description': f'Permission error: You do not have access to this dataset.',
+                    'tags': [],
+                    'title': dataset_id,
+                    'error': error_msg
+                }
+            else:
+                return {
+                    'variables': [{
+                        'id': 'default',
+                        'name': 'Default Band',
+                        'description': f'Earth Engine error: {error_msg}'
+                    }],
+                    'description': f'Error: {error_msg}',
+                    'tags': [],
+                    'title': dataset_id,
+                    'error': error_msg
+                }
 
         except Exception as e:
             import traceback
@@ -321,12 +381,10 @@ class GEEService:
     def get_dataset_temporal_info(dataset_id: str) -> Dict:
         """Get temporal information for a dataset"""
         try:
-            # 首先尝试作为单个图像处理
             try:
                 image = ee.Image(dataset_id)
                 date = image.get('system:time_start').getInfo()
                 if date:
-                    # 转换时间戳为日期字符串
                     date_str = datetime.fromtimestamp(
                         date / 1000).strftime('%Y-%m-%d')
                     return {
@@ -336,13 +394,11 @@ class GEEService:
             except Exception as e:
                 print(f"Not a single image or error: {e}")
 
-            # 如果不是单个图像，尝试作为图像集合处理
             try:
                 dataset = ee.ImageCollection(dataset_id)
                 dates = dataset.aggregate_array('system:time_start').getInfo()
 
                 if dates and len(dates) > 0:
-                    # 转换时间戳为日期字符串
                     start_date = datetime.fromtimestamp(
                         min(dates) / 1000).strftime('%Y-%m-%d')
                     end_date = datetime.fromtimestamp(
@@ -355,7 +411,6 @@ class GEEService:
             except Exception as e:
                 print(f"Not an image collection or error: {e}")
 
-            # 如果无法获取时间信息，返回空值
             return {
                 'start_date': None,
                 'end_date': None
@@ -376,29 +431,22 @@ class GEEService:
         Only search by ID (fuzzy match) and tags with pagination support
         """
         try:
-            # 获取数据集查询集
             datasets = DatasetMetadata.objects.all()
 
-            # ID 模糊搜索
             if query:
                 datasets = datasets.filter(id__icontains=query)
 
-            # 标签过滤
             if tags:
                 for tag in tags:
                     datasets = datasets.filter(tags__name__icontains=tag)
 
-            # 计算总数
             total_count = datasets.count()
 
-            # 计算分页
             start = (page - 1) * per_page
             end = start + per_page
 
-            # 获取当前页的数据集
             paginated_datasets = datasets[start:end]
 
-            # 转换为字典列表
             results = []
             for dataset in paginated_datasets:
                 results.append({
@@ -416,7 +464,6 @@ class GEEService:
                     'asset_url': dataset.asset_url
                 })
 
-            # 计算总页数
             total_pages = (total_count + per_page - 1) // per_page
 
             return {
@@ -439,7 +486,6 @@ class GEEService:
     def get_dataset_info(dataset_id: str) -> Optional[Dict]:
         """Get detailed information about a specific dataset"""
         try:
-            # 获取数据集基本信息
             basic_info = ee.data.getInfo(dataset_id)
             if not basic_info:
                 print(f"Could not get basic info for dataset: {dataset_id}")
@@ -448,7 +494,6 @@ class GEEService:
             dataset_type = basic_info.get('type', '')
             print(f"Dataset type: {dataset_type}")
 
-            # 基本信息结构，直接使用API返回的信息
             info = {
                 'id': dataset_id,
                 'type': dataset_type,
@@ -456,29 +501,24 @@ class GEEService:
                 'description': basic_info.get('description', '')
             }
 
-            # 如果properties中有description，且主description为空，则使用properties中的
             if not info['description'] and 'properties' in basic_info and 'description' in basic_info['properties']:
                 info['description'] = basic_info['properties'].get(
                     'description', '')
 
-            # 设置标题，优先使用API返回的title
             info['title'] = basic_info.get('title', dataset_id)
             if not info['title'] and 'properties' in basic_info and 'title' in basic_info['properties']:
                 info['title'] = basic_info['properties'].get(
                     'title', dataset_id)
 
-            # 为了兼容现有前端，添加bands字段
             if 'bands' in basic_info:
                 info['bands'] = basic_info['bands']
             else:
                 info['bands'] = []
 
-            # 根据类型获取额外的信息
             if dataset_type == 'IMAGE':
                 try:
                     image = ee.Image(dataset_id)
 
-                    # 如果原始信息中没有bands，获取bands信息
                     if not info['bands']:
                         bands_info = []
                         band_names = image.bandNames().getInfo()
@@ -489,14 +529,12 @@ class GEEService:
                             })
                         info['bands'] = bands_info
 
-                    # 获取时间信息
                     system_time = image.get('system:time_start').getInfo()
                     if system_time:
                         info['start_time'] = datetime.fromtimestamp(
                             system_time / 1000).strftime('%Y-%m-%d')
                         info['end_time'] = info['start_time']
 
-                    # 获取空间范围
                     info['geometry'] = image.geometry().bounds().getInfo()
 
                 except Exception as e:
@@ -507,7 +545,6 @@ class GEEService:
                     collection = ee.ImageCollection(dataset_id)
                     first_image = collection.first()
 
-                    # 如果原始信息中没有bands，从第一个影像获取bands信息
                     if not info['bands']:
                         bands_info = []
                         if first_image:
@@ -523,10 +560,8 @@ class GEEService:
                                     })
                                 info['bands'] = bands_info
 
-                    # 获取集合大小
                     info['size'] = collection.size().getInfo()
 
-                    # 获取时间范围
                     time_range = collection.reduceColumns(
                         reducer=ee.Reducer.minMax(),
                         selectors=['system:time_start']
@@ -538,13 +573,51 @@ class GEEService:
                         info['end_time'] = datetime.fromtimestamp(
                             time_range['max'] / 1000).strftime('%Y-%m-%d')
 
-                    # 获取空间范围
                     if first_image:
                         info['geometry'] = first_image.geometry().bounds().getInfo()
 
                 except Exception as e:
                     print(
                         f"Error getting additional info for image collection: {e}")
+
+            # In your get_dataset_info method, add this as a fallback
+            if 'geometry' not in info:
+                try:
+                    # Try to get basic geometry from dataset providers or documentation
+                    if 'properties' in basic_info and 'providers' in basic_info['properties'] and len(basic_info['properties']['providers']) > 0:
+                        provider = basic_info['properties']['providers'][0]
+                        if 'extent' in provider:
+                            extent = provider['extent']
+                            # Create a simple bounding box from the extent
+                            if 'spatial' in extent and 'coordinates' in extent['spatial']:
+                                coords = extent['spatial']['coordinates']
+                                info['geometry'] = {
+                                    'type': 'Polygon',
+                                    'coordinates': [coords]
+                                }
+
+                    # If we still don't have geometry, create a default world bounding box
+                    if 'geometry' not in info:
+                        print(
+                            f"Creating default world geometry for {dataset_id}")
+                        # Simple world bounding box [-180, -90, 180, 90]
+                        info['geometry'] = {
+                            'type': 'Polygon',
+                            'coordinates': [[
+                                [-180, -90], [180, -90], [180,
+                                                          90], [-180, 90], [-180, -90]
+                            ]]
+                        }
+                except Exception as e:
+                    print(f"Error creating fallback geometry: {e}")
+                    # Create a simple world bounding box as last resort
+                    info['geometry'] = {
+                        'type': 'Polygon',
+                        'coordinates': [[
+                            [-180, -90], [180, -90], [180,
+                                                      90], [-180, 90], [-180, -90]
+                        ]]
+                    }
 
             print(f"Final dataset info: {info}")
             return info
@@ -557,22 +630,19 @@ class GEEService:
     def validate_date_range(dataset_id: str, start_date: str, end_date: str) -> bool:
         """Validate if the selected date range is available for the dataset"""
         try:
-            # 首先尝试查看数据集类型
             basic_info = ee.data.getInfo(dataset_id)
             if basic_info and basic_info.get('type') == 'IMAGE':
                 print("Dataset is a single image, date range validation not needed")
-                return True  # 单一图像不需要验证日期范围
+                return True
 
-            # 对于影像集合，获取时间范围
             try:
                 dataset = ee.ImageCollection(dataset_id)
                 dates = dataset.aggregate_array('system:time_start').getInfo()
 
-                # 如果无法获取日期或日期列表为空，考虑是否这是一个非时间序列数据
                 if not dates or len(dates) == 0:
                     print(
                         "No dates found in dataset, assuming date validation is not applicable")
-                    return True  # 假设这个数据集不是时间序列数据，所以不需要验证日期
+                    return True
 
                 dataset_start = datetime.fromtimestamp(min(dates) / 1000)
                 dataset_end = datetime.fromtimestamp(max(dates) / 1000)
@@ -584,26 +654,21 @@ class GEEService:
                 print(
                     f"Selected date range: {selected_start} to {selected_end}")
 
-                # 检查选定的日期范围是否在数据集的时间范围内
                 is_valid = dataset_start <= selected_end and selected_start <= dataset_end
                 print(f"Date range validation result: {is_valid}")
                 return is_valid
             except Exception as e:
                 print(f"Error checking date range for ImageCollection: {e}")
-                # 如果出错，尝试使用单一图像
                 try:
                     image = ee.Image(dataset_id)
-                    # 如果可以作为图像加载，不需要验证日期范围
                     print("Dataset loaded as Image, date range validation not needed")
                     return True
                 except Exception as img_error:
                     print(f"Also failed to load as Image: {img_error}")
-                    # 如果所有尝试都失败，默认允许请求
                     return True
 
         except Exception as e:
             print(f"Error validating date range: {e}")
-            # 发生错误时，我们选择通过验证，让下一步处理可能的问题
             return True
 
     @staticmethod
@@ -618,56 +683,126 @@ class GEEService:
     ) -> Dict[str, Any]:
         """Generate a URL for direct download of the selected dataset"""
         try:
-            # 验证日期范围
-            if not GEEService.validate_date_range(dataset_id, start_date, end_date):
-                return {
-                    'error': 'Selected date range is not available for this dataset'
-                }
-
-            # 处理区域
-            region_geom = geojson.loads(region)
-            ee_geometry = ee.Geometry(region_geom['features'][0]['geometry'])
-
-            # 检查数据集类型
-            image = None
-            basic_info = ee.data.getInfo(dataset_id)
-
-            if basic_info and basic_info.get('type') == 'IMAGE':
-                # 单一图像
-                image = ee.Image(dataset_id).select(variable)
-            else:
-                # 影像集合
-                dataset = ee.ImageCollection(dataset_id)
-                filtered_data = dataset.filterDate(
-                    start_date, end_date).select(variable)
-
-                # 检查是否有数据
-                if filtered_data.size().getInfo() == 0:
-                    return {'error': 'No data available for the selected parameters'}
-
-                # 计算数据的平均值
-                image = filtered_data.mean()
-
-            # 获取下载URL
+            # Prepare image directly without checking dataset access first
             try:
+                # Try as image first
+                image = None
+                try:
+                    image = ee.Image(dataset_id).select(variable)
+                    dataset_type = 'IMAGE'
+                except Exception:
+                    # Try as image collection
+                    dataset = ee.ImageCollection(dataset_id)
+                    filtered_data = dataset.filterDate(
+                        start_date, end_date).select(variable)
+
+                    # Check if there's data
+                    collection_size = filtered_data.size().getInfo()
+                    if collection_size == 0:
+                        return {'error': 'No data available for the selected parameters'}
+
+                    # Get the mean image
+                    image = filtered_data.mean()
+                    dataset_type = 'IMAGE_COLLECTION'
+
+                # Process the region
+                region_geom = geojson.loads(region)
+                ee_geometry = ee.Geometry(
+                    region_geom['features'][0]['geometry'])
+
+                # Create filename
+                if isinstance(dataset_id, str) and '/' in dataset_id:
+                    filename_base = dataset_id.split('/')[-1]
+                else:
+                    filename_base = str(dataset_id).replace('/', '_')
+
+                output_name = f'{filename_base}_{variable}_{start_date}_{end_date}'
+
+                # Try to get download URL with reduced max pixels
                 url = image.getDownloadURL({
-                    'name': f'{dataset_id.split("/")[-1]}_{variable}_{start_date}_{end_date}',
+                    'name': output_name,
                     'region': ee_geometry,
                     'scale': scale,
                     'crs': 'EPSG:4326',
                     'format': export_format.lower(),
-                    'maxPixels': 1e8  # Lower than toDrive limit to ensure browser can handle it
+                    'maxPixels': 1e7  # Reduce this value to improve chances of success
                 })
 
                 return {
                     'success': True,
                     'url': url,
-                    'filename': f'{dataset_id.split("/")[-1]}_{variable}_{start_date}_{end_date}.{export_format.lower()}'
+                    'filename': f'{output_name}.{export_format.lower()}'
                 }
+
             except Exception as e:
-                print(f"Error generating download URL: {e}")
-                return {'error': f'Failed to generate download URL: {str(e)}'}
+                error_msg = str(e)
+                print(f"Error in direct access approach: {error_msg}")
+
+                # If it's a permission error, return specific error
+                if "permission" in error_msg.lower():
+                    return {
+                        'error': f'Permission error: You may not have access to download this dataset. Try using the Earth Engine Code Editor directly. Error: {error_msg}'
+                    }
+                else:
+                    return {'error': f'Failed to process or download dataset: {error_msg}'}
 
         except Exception as e:
             print(f"Error in get_download_url: {e}")
             return {'error': str(e)}
+
+    @staticmethod
+    def check_dataset_access(dataset_id: str) -> Dict[str, Any]:
+        """Check if the user has permission to access the specified dataset"""
+        try:
+            # Try different approaches to access the dataset
+            # First attempt: Try to load as an Image
+            try:
+                image = ee.Image(dataset_id)
+                # Just attempt to get any property to verify access
+                _ = image.bandNames().getInfo()
+                return {'success': True, 'info': {'type': 'IMAGE'}}
+            except Exception as img_error:
+                print(f"Not an image or error: {img_error}")
+
+            # Second attempt: Try to load as an ImageCollection
+            try:
+                collection = ee.ImageCollection(dataset_id)
+                # Just attempt to get size to verify access
+                _ = collection.size().getInfo()
+                return {'success': True, 'info': {'type': 'IMAGE_COLLECTION'}}
+            except Exception as coll_error:
+                print(f"Not an image collection or error: {coll_error}")
+
+            # If both approaches fail, try the original method
+            basic_info = ee.data.getInfo(dataset_id)
+            if basic_info:
+                return {'success': True, 'info': basic_info}
+            else:
+                return {'success': False, 'error': 'Dataset not found or not accessible'}
+
+        except ee.ee_exception.EEException as e:
+            error_msg = str(e)
+            print(f"Error accessing dataset {dataset_id}: {error_msg}")
+
+            # Check if it's a permission error
+            if "does not have required permission" in error_msg or "permission denied" in error_msg:
+                return {
+                    'success': False,
+                    'error': 'Permission denied',
+                    'error_type': 'permission',
+                    'message': f'Caller does not have required permission to use this dataset. Error: {error_msg}'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'Unknown error',
+                    'error_type': 'unknown',
+                    'message': f'Error accessing dataset: {error_msg}'
+                }
+        except Exception as e:
+            print(f"General error checking dataset access: {e}")
+            return {
+                'success': False,
+                'error': 'Error checking dataset access',
+                'message': str(e)
+            }
