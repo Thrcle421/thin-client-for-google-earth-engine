@@ -36,7 +36,7 @@ pip install -r requirements.txt
 python manage.py migrate
 ```
 
-5. Load dataset catalog (optional, but recommended):
+5. Load dataset catalog:
 
 ```bash
 python manage.py load_gee_catalog
