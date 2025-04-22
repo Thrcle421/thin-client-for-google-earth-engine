@@ -165,7 +165,7 @@ class GEEService:
                 }
 
             try:
-                region_geom = geojson.loads(region)
+            region_geom = geojson.loads(region)
                 ee_geometry = ee.Geometry(
                     region_geom['features'][0]['geometry'])
             except Exception as e:
@@ -183,13 +183,13 @@ class GEEService:
                     return {'error': f"Failed to select variable '{variable}' from image: {str(e)}"}
             else:
                 try:
-                    dataset = ee.ImageCollection(dataset_id)
-                    filtered_data = dataset.filterDate(
-                        start_date, end_date).select(variable)
+            dataset = ee.ImageCollection(dataset_id)
+            filtered_data = dataset.filterDate(
+                start_date, end_date).select(variable)
 
                     collection_size = filtered_data.size().getInfo()
                     if collection_size == 0:
-                        return {'error': 'No data available for the selected parameters'}
+                return {'error': 'No data available for the selected parameters'}
 
                     print(f"Found {collection_size} images matching criteria")
 
@@ -210,26 +210,26 @@ class GEEService:
                 output_name = f'earthengine_export_{variable}'
 
             try:
-                task = ee.batch.Export.image.toDrive(
+            task = ee.batch.Export.image.toDrive(
                     image=image,
                     description=output_name,
-                    folder='GEE-Downloads',
-                    region=ee_geometry,
-                    scale=scale,
-                    crs='EPSG:4326',
-                    fileFormat=export_format,
-                    maxPixels=1e13
-                )
+                folder='GEE-Downloads',
+                region=ee_geometry,
+                scale=scale,
+                crs='EPSG:4326',
+                fileFormat=export_format,
+                maxPixels=1e13
+            )
 
-                task.start()
+            task.start()
 
                 print(f"Successfully started export task with ID: {task.id}")
 
-                return {
-                    'task_id': task.id,
-                    'status': 'STARTED',
-                    'description': task.config['description']
-                }
+            return {
+                'task_id': task.id,
+                'status': 'STARTED',
+                'description': task.config['description']
+            }
             except Exception as e:
                 print(f"Error creating or starting export task: {e}")
                 return {'error': f'Failed to start export task: {str(e)}'}
@@ -368,8 +368,8 @@ class GEEService:
             print(traceback.format_exc())
             return {
                 'variables': [{
-                    'id': 'default',
-                    'name': 'Default Band',
+                'id': 'default',
+                'name': 'Default Band',
                     'description': 'Error occurred while fetching band information: ' + str(e)
                 }],
                 'description': '',
@@ -635,20 +635,20 @@ class GEEService:
                 print("Dataset is a single image, date range validation not needed")
                 return True
 
-            try:
-                dataset = ee.ImageCollection(dataset_id)
-                dates = dataset.aggregate_array('system:time_start').getInfo()
+        try:
+            dataset = ee.ImageCollection(dataset_id)
+            dates = dataset.aggregate_array('system:time_start').getInfo()
 
                 if not dates or len(dates) == 0:
                     print(
                         "No dates found in dataset, assuming date validation is not applicable")
                     return True
 
-                dataset_start = datetime.fromtimestamp(min(dates) / 1000)
-                dataset_end = datetime.fromtimestamp(max(dates) / 1000)
+            dataset_start = datetime.fromtimestamp(min(dates) / 1000)
+            dataset_end = datetime.fromtimestamp(max(dates) / 1000)
 
-                selected_start = datetime.strptime(start_date, '%Y-%m-%d')
-                selected_end = datetime.strptime(end_date, '%Y-%m-%d')
+            selected_start = datetime.strptime(start_date, '%Y-%m-%d')
+            selected_end = datetime.strptime(end_date, '%Y-%m-%d')
 
                 print(f"Dataset date range: {dataset_start} to {dataset_end}")
                 print(
