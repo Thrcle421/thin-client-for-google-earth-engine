@@ -75,10 +75,32 @@
     </nav>
 
     <div class="container mt-4">
+        <!-- Title and tags side by side - remove mb-4 margin -->
         <div class="row">
             <div class="col-md-8">
                 <h2>{{ metadata.title }}</h2>
+            </div>
+            <div class="col-md-4">
+                <!-- Remove top padding from metadata-section -->
+                <div class="metadata-section" style="margin-top: 0; padding-top: 10px;">
+                    <h4>Tags</h4>
+                    <div class="mb-0">
+                        {% for tag in metadata.properties.keywords %}
+                        <span class="badge bg-secondary me-1">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
 
+                    <div id="tagsContainer" style="display: none;">
+                        <h5>Additional Tags</h5>
+                        <div id="datasetTags" class="mb-0"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Content row - add negative top margin to remove space -->
+        <div class="row" style="margin-top: -15px;">
+            <div class="col-md-8">
                 <div class="metadata-section">
                     <h4>Description</h4>
                     <div id="datasetDescription">
@@ -164,29 +186,29 @@
 
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                        try {
-                            const coverageGeometry = {{ metadata.geometry|safe }};
-                            if (!coverageGeometry) {
-                                document.getElementById('coverage-map').innerHTML = '<p class="text-center">No coverage data available</p>';
-                                return;
+                    try {
+                        const coverageGeometry = {{ metadata.geometry|safe }};
+                        if (!coverageGeometry) {
+                            document.getElementById('coverage-map').innerHTML = '<p class="text-center">No coverage data available</p>';
+                            return;
+                        }
+                        
+                        const coverageMap = L.map('coverage-map');
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(coverageMap);
+                        
+                        const geoJsonLayer = L.geoJSON(coverageGeometry, {
+                            style: {
+                                color: '#ff7800',
+                                weight: 2,
+                                opacity: 0.65
                             }
-                            
-                    const coverageMap = L.map('coverage-map');
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(coverageMap);
-                    
-                            const geoJsonLayer = L.geoJSON(coverageGeometry, {
-                        style: {
-                            color: '#ff7800',
-                            weight: 2,
-                            opacity: 0.65
-                        }
-                    }).addTo(coverageMap);
-                    
-                    coverageMap.fitBounds(geoJsonLayer.getBounds());
-                        } catch (error) {
-                            console.error("Error displaying map:", error);
-                            document.getElementById('coverage-map').innerHTML = '<p class="text-center">Error displaying coverage area</p>';
-                        }
+                        }).addTo(coverageMap);
+                        
+                        coverageMap.fitBounds(geoJsonLayer.getBounds());
+                    } catch (error) {
+                        console.error("Error displaying map:", error);
+                        document.getElementById('coverage-map').innerHTML = '<p class="text-center">Error displaying coverage area</p>';
+                    }
                 });
                 </script>
                 {% else %}
@@ -202,11 +224,11 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                    <label for="variable" class="form-label">Variable</label>
+                                <label for="variable" class="form-label">Variable/Band</label>
                                 <select class="form-control" id="variable" required>
-                                        <option value="">Select a variable...</option>
+                                    <option value="">Select a variable...</option>
                                 </select>
-                                    <div id="variableDescription" class="variable-description"></div>
+                                <div id="variableDescription" class="variable-description"></div>
                             </div>
                             <div class="mb-3">
                                 <label for="startDate" class="form-label">Start Date</label>
@@ -215,12 +237,14 @@
                             <div class="mb-3">
                                 <label for="endDate" class="form-label">End Date</label>
                                 <input type="date" class="form-control" id="endDate" required lang="en">
+                                <small class="form-text text-muted">Single date or date range supported</small>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="scale" class="form-label">Scale (meters)</label>
                                 <input type="number" class="form-control" id="scale" value="1000" required>
+                                <small class="form-text text-muted">Resolution in meters</small>
                             </div>
                             <div class="mb-3">
                                 <label for="format" class="form-label">Export Format</label>
@@ -229,60 +253,69 @@
                                     <option value="TFRecord">TFRecord</option>
                                 </select>
                             </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Download Method</label>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="downloadMethod"
-                                            id="driveMethod" value="drive" checked>
-                                        <label class="form-check-label" for="driveMethod">
-                                            Google Drive Export (for large datasets)
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="downloadMethod"
-                                            id="localMethod" value="local">
-                                        <label class="form-check-label" for="localMethod">
-                                            Direct Download (smaller datasets)
-                                        </label>
-                                    </div>
+                            <div class="mb-3">
+                                <label for="folder_name" class="form-label">Google Drive Folder Name</label>
+                                <input type="text" class="form-control" id="folder_name" value="GEE-Downloads">
+                                <small class="form-text text-muted">Files will be saved to this folder in your Google Drive</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="ee_project_id" class="form-label">Earth Engine Project ID</label>
+                                <input type="text" class="form-control" id="ee_project_id" placeholder="Enter your Project ID">
+                            </div>
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-secondary" onclick="reinitializeEarthEngine()">Reinitialize Earth Engine</button>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Download Method</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="downloadMethod"
+                                        id="driveMethod" value="drive" checked>
+                                    <label class="form-check-label" for="driveMethod">
+                                        Google Drive Export (for large datasets)
+                                    </label>
                                 </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="downloadMethod"
+                                        id="localMethod" value="local">
+                                    <label class="form-check-label" for="localMethod">
+                                        Direct Download (smaller datasets)
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Select Region on Map</label>
                         <div id="map"></div>
                     </div>
-                        <button type="button" class="btn btn-primary" onclick="startDownload()">Start Download</button>
+                    <button type="button" class="btn btn-primary" onclick="startDownload()">Start Download</button>
                 </form>
 
-                    <div id="taskStatus" class="task-status alert">
-                        <h5 class="alert-heading">Download Status</h5>
-                        <p id="taskMessage"></p>
-                        <div class="progress mb-2" style="display: none;">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar">
-                            </div>
-                        </div>
-                        <div id="downloadLink" style="display: none;">
-                            <a href="#" class="btn btn-success mt-3" target="_blank">Download File</a>
+                <div id="taskStatus" class="task-status alert">
+                    <h5 class="alert-heading">Download Status</h5>
+                    <p id="taskMessage"></p>
+                    <div class="progress mb-2" style="display: none;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                    </div>
+                    <div id="downloadLink" style="display: none;">
+                        <a href="#" class="btn btn-success mt-3" target="_blank">Download File</a>
+                    </div>
+                    <div id="driveInfo" class="mt-3" style="display: none;">
+                        <p>Your export has been started and is being processed by Google Earth Engine.</p>
+                        <p>The file will be available in your Google Drive folder once processing is complete.</p>
+                        <p><strong>Folder:</strong> <span id="driveFolderName"></span></p>
+                        <p><strong>Filename:</strong> <span id="driveFileName"></span></p>
+                        <div class="alert alert-info">
+                            <p><strong>Note:</strong> Processing will continue even if you close this page or if the session expires.</p>
+                            <p>You can check your Google Drive folder directly to see when your files are ready.</p>
+                            <p><a href="https://drive.google.com/drive/my-drive" class="btn btn-sm btn-outline-primary" target="_blank">Open Google Drive</a></p>
                         </div>
                     </div>
                 </div>
             </div>
-
+            
             <div class="col-md-4">
-                <div class="metadata-section">
-                    <h4>Tags</h4>
-                    <div class="mb-3">
-                        {% for tag in metadata.properties.keywords %}
-                        <span class="badge bg-secondary me-1">{{ tag }}</span>
-                        {% endfor %}
-                    </div>
-
-                    <div id="tagsContainer" style="display: none;">
-                        <h5>Additional Tags</h5>
-                        <div id="datasetTags" class="mb-3"></div>
-                    </div>
-                </div>
+                <!-- Right sidebar content if needed -->
             </div>
         </div>
     </div>
@@ -327,7 +360,17 @@
         async function loadVariables() {
             try {
                 console.log('Fetching variables...');
-                const response = await fetch('/api/dataset/{{ metadata.id }}/variables/');
+                
+                // Get project ID
+                const projectId = document.getElementById('ee_project_id').value.trim();
+                
+                // Build URL with project ID
+                let apiUrl = '/api/dataset/{{ metadata.id }}/variables/';
+                if (projectId) {
+                    apiUrl += `?project_id=${encodeURIComponent(projectId)}`;
+                }
+                
+                const response = await fetch(apiUrl);
                 const data = await response.json();
                 console.log('Received data:', data);
 
@@ -524,7 +567,16 @@
         // Load temporal info
         async function loadTemporalInfo() {
             try {
-                const response = await fetch(`/dataset/temporal-info/?dataset_id={{ metadata.id }}`);
+                // Get project ID
+                const projectId = document.getElementById('ee_project_id').value.trim();
+                
+                // Build URL with project ID
+                let apiUrl = `/dataset/temporal-info/?dataset_id={{ metadata.id }}`;
+                if (projectId) {
+                    apiUrl += `&project_id=${encodeURIComponent(projectId)}`;
+                }
+                
+                const response = await fetch(apiUrl);
                 const data = await response.json();
 
                 console.log('Temporal info:', data);
@@ -610,6 +662,34 @@
             }
 
             const form = document.getElementById('downloadForm');
+            
+            // Check if variable is selected
+            if (!form.variable.value) {
+                alert('Please select a variable');
+                return false;
+            }
+            
+            // Check if project ID is provided
+            const projectId = document.getElementById('ee_project_id').value.trim();
+            if (!projectId) {
+                alert('Please enter your Earth Engine Project ID');
+                return false;
+            }
+            
+            // Validate project ID format
+            if (projectId.indexOf('517222506229') !== -1) {
+                // This appears to be an incorrect numeric ID
+                alert('Your project ID appears to be incorrect. Please use the format "ee-yourname" instead of a numeric ID.');
+                return false;
+            }
+            
+            // Suggest the working project ID if needed
+            if (!projectId.startsWith('ee-')) {
+                if (!confirm(`Your project ID "${projectId}" doesn't follow the expected format (should usually start with "ee-"). Continue anyway?`)) {
+                    return false;
+                }
+            }
+            
             const data = {
                 dataset_id: '{{ metadata.id }}',
                 variable: form.variable.value,
@@ -617,7 +697,9 @@
                 end_date: form.endDate.value,
                 scale: parseInt(form.scale.value),
                 format: form.format.value,
-                region: JSON.stringify(drawnItems.toGeoJSON())
+                region: JSON.stringify(drawnItems.toGeoJSON()),
+                folder_name: form.folder_name.value,
+                project_name: projectId  // Add project ID parameter
             };
 
             const downloadMethod = document.querySelector('input[name="downloadMethod"]:checked').value;
@@ -688,55 +770,206 @@
 
         // Show task status
         function showTaskStatus(taskId) {
+            console.log('Starting status monitoring for task:', taskId);
             const statusDiv = document.getElementById('taskStatus');
             const messageDiv = document.getElementById('taskMessage');
             const progressBar = statusDiv.querySelector('.progress');
             const progressBarInner = progressBar.querySelector('.progress-bar');
+            const driveInfo = document.getElementById('driveInfo');
+            
+            // Store task ID in a data attribute for debugging
+            statusDiv.dataset.taskId = taskId;
             
             statusDiv.className = 'task-status alert alert-info';
             statusDiv.style.display = 'block';
-            messageDiv.textContent = 'Download task started...';
+            messageDiv.textContent = 'Export task started...';
             progressBar.style.display = 'block';
             
             // Start polling task status
             pollTaskStatus(taskId);
+            
+            // Show the Google Drive info section
+            driveInfo.style.display = 'block';
+            
+            // Set folder name and update Google Drive link
+            const folderName = document.getElementById('folder_name').value.trim() || 'GEE-Downloads';
+            document.getElementById('driveFolderName').textContent = folderName;
+            
+            // Update Google Drive link to point directly to the folder if possible
+            const driveLink = driveInfo.querySelector('a[href*="drive.google.com"]');
+            if (driveLink) {
+                // Encode the folder name for the search query
+                const encodedFolderName = encodeURIComponent(`title = "${folderName}"`);
+                driveLink.href = `https://drive.google.com/drive/search?q=${encodedFolderName}`;
+                driveLink.textContent = `Open "${folderName}" in Google Drive`;
+            }
         }
 
         // Poll task status
         async function pollTaskStatus(taskId) {
+            if (!taskId) {
+                console.error('No task ID provided for polling');
+                updateTaskStatus({ status: 'FAILED', error: 'No task ID available' });
+                return;
+            }
+            
             try {
-                const response = await fetch(`/task-status/${taskId}/`);
-                const data = await response.json();
+                console.log('Polling status for task:', taskId);
                 
-                updateTaskStatus(data);
+                // Get the project ID
+                const projectId = document.getElementById('ee_project_id').value.trim();
                 
-                if (data.status !== 'COMPLETED' && data.status !== 'FAILED') {
+                // Use safer URL construction with project ID
+                const url = `/task-status/${encodeURIComponent(taskId)}/?project_id=${encodeURIComponent(projectId)}`;
+                console.log('Fetching from URL:', url);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    console.error('Task status response not OK:', response.status, response.statusText);
+                    
+                    // Check if we got redirected to login page (authentication timeout)
+                    if (response.status === 302 || response.type === 'opaqueredirect') {
+                        showError('Authentication session expired. Please reload the page and re-authenticate with Earth Engine.');
+                        return;
+                    }
+                    
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                // Check content type to ensure we're getting JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.error('Response is not JSON:', contentType);
+                    showError('Session expired. Please reload the page and try again.');
+                    return;
+                }
+                
+                // Get response as text first for debugging
+                const rawText = await response.text();
+                
+                // Check if the response seems to be HTML instead of JSON
+                if (rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
+                    console.error('Received HTML instead of JSON');
+                    showError('Authentication session expired. Please reload the page and re-authenticate with Earth Engine.');
+                    return;
+                }
+                
+                console.log('Raw response text:', rawText);
+                
+                // Try to parse as JSON
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                    console.log('Parsed task status response:', data);
+                } catch (parseError) {
+                    console.error('Error parsing JSON response:', parseError);
+                    throw new Error(`Invalid JSON response: ${rawText.substring(0, 100)}...`);
+                }
+                
+                // Defensive programming: ensure data is an object
+                if (!data || typeof data !== 'object') {
+                    console.error('Response is not an object:', data);
+                    data = { status: 'FAILED', error: `Invalid response format: ${typeof data}` };
+                }
+                
+                // Extract information directly with fallbacks to avoid errors
+                const statusInfo = {
+                    status: (data.status || 'UNKNOWN').toString().toUpperCase(),
+                    progress: parseInt(data.progress || 0, 10),
+                    error: (data.error || 'Unknown error').toString(),
+                    folder: data.folder || document.getElementById('folder_name').value,
+                    filename: data.filename || ''
+                };
+                
+                console.log('Status info extracted:', statusInfo);
+                updateTaskStatus(statusInfo);
+                
+                // Show Google Drive folder information
+                if (statusInfo.folder) {
+                    const driveInfo = document.getElementById('driveInfo');
+                    const folderNameSpan = document.getElementById('driveFolderName');
+                    const fileNameSpan = document.getElementById('driveFileName');
+                    
+                    if (driveInfo && folderNameSpan && fileNameSpan) {
+                        folderNameSpan.textContent = statusInfo.folder;
+                        fileNameSpan.textContent = statusInfo.filename || 'Will be determined by Earth Engine';
+                        driveInfo.style.display = 'block';
+                    }
+                }
+                
+                // Only continue polling if task is still in progress
+                if (statusInfo.status !== 'COMPLETED' && 
+                    statusInfo.status !== 'FAILED' && 
+                    statusInfo.status !== 'CANCELLED') {
+                    console.log('Task still in progress, scheduling next poll');
                     setTimeout(() => pollTaskStatus(taskId), 5000);
+                } else {
+                    console.log('Task completed or failed, stopping polling');
                 }
             } catch (error) {
                 console.error('Error polling task status:', error);
+                updateTaskStatus({
+                    status: 'FAILED',
+                    error: `Failed to poll task status: ${error.message}`
+                });
             }
         }
 
         // Update task status display
         function updateTaskStatus(data) {
+            console.log('Updating UI with task status:', data);
             const statusDiv = document.getElementById('taskStatus');
             const messageDiv = document.getElementById('taskMessage');
             const progressBar = statusDiv.querySelector('.progress-bar');
             
-            switch (data.status) {
-                case 'COMPLETED':
-                    statusDiv.className = 'task-status alert alert-success';
-                    messageDiv.textContent = 'Download completed! Check your Google Drive folder.';
-                    progressBar.style.width = '100%';
-                    break;
-                case 'FAILED':
-                    statusDiv.className = 'task-status alert alert-danger';
-                    messageDiv.textContent = `Download failed: ${data.error || 'Unknown error'}`;
-                    break;
-                default:
-                    progressBar.style.width = `${data.progress || 0}%`;
-                    messageDiv.textContent = `Download in progress: ${data.progress || 0}%`;
+            try {
+                // Ensure data has required properties and convert to appropriate types
+                const status = String(data.status || 'FAILED').toUpperCase();
+                const error = String(data.error || 'Unknown error');
+                
+                // Ensure progress is a number between 0-100
+                let progress = 0;
+                if (data.progress !== undefined) {
+                    progress = Number(data.progress);
+                    if (isNaN(progress)) progress = 0;
+                    if (progress < 0) progress = 0;
+                    if (progress > 100) progress = 100;
+                }
+                
+                console.log(`Status: ${status}, Progress: ${progress}, Error: ${error}`);
+                
+                switch (status) {
+                    case 'COMPLETED':
+                        statusDiv.className = 'task-status alert alert-success';
+                        messageDiv.textContent = 'Download completed! Check your Google Drive folder.';
+                        progressBar.style.width = '100%';
+                        break;
+                    case 'FAILED':
+                    case 'CANCELLED':
+                        statusDiv.className = 'task-status alert alert-danger';
+                        messageDiv.textContent = `Download failed: ${error}`;
+                        break;
+                    case 'RUNNING':
+                        statusDiv.className = 'task-status alert alert-info';
+                        progressBar.style.width = `${progress}%`;
+                        messageDiv.textContent = `Export in progress: ${progress}%`;
+                        break;
+                    case 'READY':
+                        statusDiv.className = 'task-status alert alert-info';
+                        progressBar.style.width = `5%`;
+                        messageDiv.textContent = 'Task submitted, waiting to start...';
+                        break;
+                    default:
+                        statusDiv.className = 'task-status alert alert-info';
+                        progressBar.style.width = `${progress}%`;
+                        messageDiv.textContent = `Task status: ${status} (${progress}%)`;
+                }
+            } catch (error) {
+                console.error('Error updating task status UI:', error);
+                statusDiv.className = 'task-status alert alert-danger';
+                messageDiv.textContent = 'Error updating task status: ' + error.message;
+                progressBar.style.width = '0%';
             }
         }
 
@@ -750,6 +983,28 @@
             statusDiv.style.display = 'block';
             messageDiv.innerHTML = `<strong>Error:</strong> ${message}`;
             progressBar.style.display = 'none';
+
+            // If it's an authentication or session error, add reload button
+            if (message && (message.toLowerCase().includes('session') || message.toLowerCase().includes('authentication'))) {
+                const reloadBtn = document.createElement('button');
+                reloadBtn.className = 'btn btn-primary mt-3';
+                reloadBtn.textContent = 'Reload Page';
+                reloadBtn.onclick = function() { 
+                    window.location.reload(); 
+                };
+                messageDiv.appendChild(document.createElement('br'));
+                messageDiv.appendChild(reloadBtn);
+                
+                // Also add instructions for checking Google Drive directly
+                const driveInfo = document.createElement('div');
+                driveInfo.className = 'mt-3 alert alert-info';
+                driveInfo.innerHTML = `
+                    <p><strong>Important:</strong> Even if the status check fails, your export task will continue processing in the background.</p>
+                    <p>You can check your Google Drive folder directly to see if the file appears there.</p>
+                    <p><a href="https://drive.google.com/drive/folders/0B0" class="btn btn-outline-primary" target="_blank">Open Google Drive</a></p>
+                `;
+                messageDiv.appendChild(driveInfo);
+            }
 
             // If it's a permission error, add more help information
             if (message && message.toLowerCase().includes('permission')) {
@@ -769,6 +1024,13 @@
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function () {
+            // Restore project ID from localStorage
+            const savedProjectId = localStorage.getItem('ee_project_id');
+            if (savedProjectId) {
+                document.getElementById('ee_project_id').value = savedProjectId;
+                console.log("Restored project ID from localStorage:", savedProjectId);
+            }
+            
             // Set date picker language and format
             const dateInputs = document.querySelectorAll('input[type="date"]');
             dateInputs.forEach(input => {
@@ -800,6 +1062,43 @@
             loadVariables();
             loadTemporalInfo();
         });
+        
+        // Reinitialize Earth Engine Authentication
+        async function reinitializeEarthEngine() {
+            try {
+                const projectId = document.getElementById('ee_project_id').value.trim();
+                if (!projectId) {
+                    alert('Please enter your Earth Engine Project ID');
+                    return;
+                }
+                
+                // Save project ID to localStorage
+                localStorage.setItem('ee_project_id', projectId);
+                
+                const response = await fetch('/reinitialize-ee/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ project_id: projectId })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    alert('Earth Engine authentication successful! You can now continue downloading data.');
+                    // Refresh variables and temporal information
+                    loadVariables();
+                    loadTemporalInfo();
+                } else {
+                    alert(`Authentication failed: ${result.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Authentication error:', error);
+                alert(`Error during authentication process: ${error.message}`);
+            }
+        }
     </script>
 </body>
 

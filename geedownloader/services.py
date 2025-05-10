@@ -148,122 +148,355 @@ class GEEService:
         variable: str,
         region: str,
         export_format: str = 'GeoTIFF',
-        scale: int = 1000
+        scale: int = 1000,
+        folder_name: str = 'GEE-Downloads',
+        project_name: str = None
     ) -> Dict[str, Any]:
-        """Start a download task for the specified dataset"""
+        """
+        Start a download task to export dataset to Google Drive
+
+        Parameters:
+        -----------
+        dataset_id : str
+            Earth Engine dataset ID (collection or image)
+        start_date : str
+            Start date in format 'YYYY-MM-DD'
+        end_date : str
+            End date in format 'YYYY-MM-DD'
+        variable : str
+            Band/variable name to export
+        region : str
+            GeoJSON string representing the export region
+        export_format : str
+            Export format (e.g., 'GeoTIFF', 'TFRecord')
+        scale : int
+            Resolution in meters
+        folder_name : str
+            Name of the folder in Google Drive where files will be saved
+        project_name : str
+            Google Earth Engine project ID
+
+        Returns:
+        --------
+        Dict with task information or error message
+        """
         try:
+            print(
+                f"\n=== Starting download task for {dataset_id} with project {project_name} ===")
 
-            access_check = GEEService.check_dataset_access(dataset_id)
-            if not access_check['success']:
-                return {'error': access_check.get('message', access_check['error'])}
+            # Ensure Earth Engine is initialized with the correct project ID
+            if project_name:
+                try:
+                    ee.Initialize(project=project_name)
+                    print(
+                        f"Re-initialized Earth Engine with project ID: {project_name}")
 
-            basic_info = access_check['info']
+                    # Test the project access with a simple operation
+                    try:
+                        test = ee.Number(1).add(2).getInfo()
+                        if test != 3:
+                            return {'error': f"Failed to initialize Earth Engine with project ID: {project_name}. Test operation failed."}
+                    except ee.ee_exception.EEException as test_error:
+                        error_msg = str(test_error)
+                        if "Permission denied" in error_msg or "not found" in error_msg or "does not have required permission" in error_msg:
+                            return {'error': f"Permission error: Caller does not have required permission to use project {project_name}. Please check your project ID."}
+                        else:
+                            print(f"Test operation error: {test_error}")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with project {project_name}: {e}")
+                    error_msg = str(e)
+                    if "Permission denied" in error_msg or "not found" in error_msg or "does not have required permission" in error_msg:
+                        return {'error': f"Permission error: Caller does not have required permission to use project {project_name}. Please check your project ID."}
+                    # Continue execution as it might already be initialized
 
-            if not GEEService.validate_date_range(dataset_id, start_date, end_date):
-                return {
-                    'error': 'Selected date range is not available for this dataset'
-                }
-
+            # Parse the region
             try:
-            region_geom = geojson.loads(region)
+                if isinstance(region, str):
+                    try:
+                        region_geom = geojson.loads(region)
+                    except Exception as e:
+                        print(f"Error parsing region as JSON: {e}")
+                        return {'error': f"Invalid region format: {str(e)}"}
+                else:
+                    region_geom = region
+
+                # Verify the region structure
+                if not region_geom or not isinstance(region_geom, dict) or not region_geom.get('features'):
+                    print("Region missing features or invalid structure")
+                    return {'error': "Invalid region format: missing features or invalid structure"}
+
+                # Create EE geometry from the first feature's geometry
                 ee_geometry = ee.Geometry(
                     region_geom['features'][0]['geometry'])
+                print(f"Region geometry parsed successfully")
             except Exception as e:
                 print(f"Error parsing region geometry: {e}")
                 return {'error': f"Invalid region format: {str(e)}"}
 
+            # Check dataset access before proceeding
+            access_check = GEEService.check_dataset_access(
+                dataset_id, project_name)
+            if not access_check['success']:
+                error_msg = access_check.get('message', access_check['error'])
+                print(f"Access error: {error_msg}")
+                return {'error': error_msg}
+
+            # Validate date range
+            if not GEEService.validate_date_range(dataset_id, start_date, end_date):
+                print(
+                    f"Date range validation failed for {start_date} to {end_date}")
+                return {'error': 'Selected date range is not available for this dataset'}
+
+            # Create a list of dates for time series if needed
+            single_date = start_date == end_date
+
+            # Determine if this is an image or image collection
+            is_collection = False
+            try:
+                dataset_type = access_check['info'].get('type', '')
+                is_collection = dataset_type == 'IMAGE_COLLECTION'
+                print(f"Dataset type: {dataset_type}")
+            except Exception as e:
+                print(f"Error determining dataset type: {e}")
+
+            # Try first as image, then as collection if that fails
             image = None
-            dataset_type = basic_info.get('type', '')
-
-            if dataset_type == 'IMAGE':
-                try:
+            try:
+                if not is_collection:
+                    # For single image datasets
+                    print(f"Processing as single image: {dataset_id}")
                     image = ee.Image(dataset_id).select(variable)
-                except Exception as e:
-                    print(f"Error selecting variable from image: {e}")
-                    return {'error': f"Failed to select variable '{variable}' from image: {str(e)}"}
-            else:
-                try:
-            dataset = ee.ImageCollection(dataset_id)
-            filtered_data = dataset.filterDate(
-                start_date, end_date).select(variable)
+                else:
+                    # For image collections
+                    print(
+                        f"Processing as image collection from {start_date} to {end_date}")
+                    collection = ee.ImageCollection(dataset_id)
+                    filtered_data = collection.filterDate(
+                        start_date, end_date).select(variable)
 
+                    # Get collection size
                     collection_size = filtered_data.size().getInfo()
+                    print(f"Found {collection_size} images in date range")
+
                     if collection_size == 0:
-                return {'error': 'No data available for the selected parameters'}
+                        date_info = GEEService.get_dataset_temporal_info(
+                            dataset_id, project_name)
+                        available_range = ""
+                        if date_info.get('start_date') and date_info.get('end_date'):
+                            available_range = f" Data is available from {date_info.get('start_date')} to {date_info.get('end_date')}."
 
-                    print(f"Found {collection_size} images matching criteria")
+                        return {
+                            'error': f'No data available for the selected date range ({start_date} to {end_date}).{available_range} Please try a different date range.'
+                        }
 
+                    # Compute mean image (or use more appropriate reducer if needed)
                     image = filtered_data.mean()
-                except Exception as e:
-                    print(f"Error processing image collection: {e}")
-                    return {'error': f"Failed to process image collection: {str(e)}"}
+            except Exception as e:
+                print(f"Error processing dataset: {e}")
+                return {'error': f"Failed to process dataset: {str(e)}"}
 
+            # Format the output name
             try:
                 if isinstance(dataset_id, str) and '/' in dataset_id:
                     filename_base = dataset_id.split('/')[-1]
                 else:
                     filename_base = str(dataset_id).replace('/', '_')
 
-                output_name = f'{filename_base}_{variable}_{start_date}_{end_date}'
+                date_suffix = start_date
+                if start_date != end_date:
+                    date_suffix = f"{start_date}_to_{end_date}"
+
+                output_name = f"{filename_base}_{variable}_{date_suffix}"
+                print(f"Output filename: {output_name}")
             except Exception as e:
                 print(f"Error formatting output name: {e}")
-                output_name = f'earthengine_export_{variable}'
+                output_name = f"earthengine_export_{variable}"
 
+            # Create and start the export task
             try:
-            task = ee.batch.Export.image.toDrive(
+                print(
+                    f"Starting export to folder '{folder_name}' with format '{export_format}'")
+                task = ee.batch.Export.image.toDrive(
                     image=image,
                     description=output_name,
-                folder='GEE-Downloads',
-                region=ee_geometry,
-                scale=scale,
-                crs='EPSG:4326',
-                fileFormat=export_format,
-                maxPixels=1e13
-            )
+                    folder=folder_name,
+                    region=ee_geometry,
+                    scale=scale,
+                    crs='EPSG:4326',
+                    fileFormat=export_format,
+                    maxPixels=1e13
+                )
 
-            task.start()
+                task.start()
 
-                print(f"Successfully started export task with ID: {task.id}")
+                # Ensure task.id is a string
+                task_id = str(task.id) if hasattr(task, 'id') else "unknown"
+                print(f"Successfully started export task with ID: {task_id}")
 
-            return {
-                'task_id': task.id,
-                'status': 'STARTED',
-                'description': task.config['description']
-            }
+                # Return task information with the folder name included
+                return {
+                    'task_id': task_id,
+                    'status': 'STARTED',
+                    'description': output_name,
+                    'folder': folder_name,
+                    'filename': f"{output_name}.{export_format.lower()}"
+                }
             except Exception as e:
                 print(f"Error creating or starting export task: {e}")
                 return {'error': f'Failed to start export task: {str(e)}'}
 
         except Exception as e:
             print(f"Error in start_download_task: {e}")
+            import traceback
+            traceback.print_exc()
             return {'error': str(e)}
 
     @staticmethod
-    def get_task_status(task_id: str) -> Dict[str, Any]:
-        """Get the status of a download task"""
+    def get_task_status(task_id: str, project_name: str = None) -> Dict[str, Any]:
+        """
+        Get the status of a download task
+
+        Parameters:
+        -----------
+        task_id : str
+            The Earth Engine task ID to check
+        project_name : str, optional
+            The Earth Engine project ID to use
+
+        Returns:
+        --------
+        Dict containing status information:
+            - status: Task state (e.g., READY, RUNNING, COMPLETED, FAILED)
+            - progress: Percentage completion (0-100)
+            - error: Error message if task failed
+        """
         try:
+            print(f"Getting status for task ID: {task_id}")
+
+            # Ensure Earth Engine is initialized with the correct project ID
+            if project_name:
+                try:
+                    ee.Initialize(project=project_name)
+                    print(
+                        f"Re-initialized Earth Engine with project ID: {project_name} for task status")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with project {project_name}: {e}")
+                    # Continue execution as it might already be initialized with default project
+
+            # Explicitly reinitialize with "ee-thrcle421" if no project provided
+            # This is a fallback to ensure we're using the known working project
+            elif not project_name:
+                try:
+                    ee.Initialize(project="ee-thrcle421")
+                    print(
+                        "Re-initialized Earth Engine with default project ID: ee-thrcle421")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with default project: {e}")
+
+            # Get the task list from Earth Engine
             tasks = ee.data.getTaskList()
-            task = next((t for t in tasks if t['id'] == task_id), None)
+            print(f"Total tasks: {len(tasks)}")
 
+            # Print task structure for debugging
+            if tasks and len(tasks) > 0:
+                print(f"First task type: {type(tasks[0])}")
+                print(
+                    f"First task keys: {tasks[0].keys() if isinstance(tasks[0], dict) else 'Not a dict'}")
+                print(f"First task: {tasks[0]}")
+
+            # Make sure task_id is a string
+            if not isinstance(task_id, str):
+                task_id = str(task_id)
+
+            # Find the matching task
+            task = None
+            for t in tasks:
+                try:
+                    if isinstance(t, dict) and 'id' in t and str(t['id']) == task_id:
+                        task = t
+                        break
+                except Exception as e:
+                    print(f"Error comparing task: {e}")
+                    continue
+
+            # Handle case where task is not found
             if not task:
-                return {'error': 'Task not found'}
+                print(f"Task with ID {task_id} not found")
+                return {
+                    'status': 'FAILED',
+                    'progress': 0,
+                    'error': 'Task not found or may have expired'
+                }
 
-            return {
-                'status': task['state'],
-                'progress': task.get('progress', 0),
-                'error': task.get('error_message', None)
+            print(f"Found task: {task}")
+
+            # Extract state and progress with fallbacks for safety
+            state = 'UNKNOWN'
+            progress = 0
+            error_msg = None
+
+            if isinstance(task, dict):
+                state = task.get('state', 'UNKNOWN')
+
+                # Calculate progress based on state
+                if state == 'COMPLETED':
+                    progress = 100
+                elif state == 'FAILED' or state == 'CANCELLED':
+                    progress = 0
+                else:
+                    # For READY, RUNNING, etc. states
+                    progress = task.get('progress', 0)
+                    if progress is None:
+                        progress = 0
+                    elif isinstance(progress, float):
+                        # Convert from fraction to percentage
+                        progress = int(progress * 100)
+
+                # Get error message if available
+                error_msg = task.get('error_message', None)
+
+            # Build result dictionary
+            result = {
+                'status': state,
+                'progress': progress,
+                'error': error_msg
             }
+            print(f"Returning result: {result}")
+            return result
 
         except Exception as e:
-            return {'error': str(e)}
+            print(f"Error getting task status: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'status': 'FAILED',
+                'progress': 0,
+                'error': f"Error checking task status: {str(e)}"
+            }
 
     @staticmethod
-    def get_available_variables(dataset_id: str) -> Dict:
+    def get_available_variables(dataset_id: str, project_name: str = None) -> Dict:
         """Get available variables for a dataset"""
         try:
-            print(f"\n=== Getting variables for dataset: {dataset_id} ===")
+            print(
+                f"\n=== Getting variables for dataset: {dataset_id} with project {project_name} ===")
 
-            access_check = GEEService.check_dataset_access(dataset_id)
+            # Ensure Earth Engine is initialized with the correct project ID
+            if project_name:
+                try:
+                    ee.Initialize(project=project_name)
+                    print(
+                        f"Re-initialized Earth Engine with project ID: {project_name} for getting variables")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with project {project_name}: {e}")
+                    # Continue execution as it might already be initialized
+
+            access_check = GEEService.check_dataset_access(
+                dataset_id, project_name)
             if not access_check['success']:
                 error_message = access_check.get(
                     'message', access_check['error'])
@@ -368,8 +601,8 @@ class GEEService:
             print(traceback.format_exc())
             return {
                 'variables': [{
-                'id': 'default',
-                'name': 'Default Band',
+                    'id': 'default',
+                    'name': 'Default Band',
                     'description': 'Error occurred while fetching band information: ' + str(e)
                 }],
                 'description': '',
@@ -378,9 +611,23 @@ class GEEService:
             }
 
     @staticmethod
-    def get_dataset_temporal_info(dataset_id: str) -> Dict:
+    def get_dataset_temporal_info(dataset_id: str, project_name: str = None) -> Dict:
         """Get temporal information for a dataset"""
         try:
+            print(
+                f"\n=== Getting temporal info for dataset: {dataset_id} with project {project_name} ===")
+
+            # Ensure Earth Engine is initialized with the correct project ID
+            if project_name:
+                try:
+                    ee.Initialize(project=project_name)
+                    print(
+                        f"Re-initialized Earth Engine with project ID: {project_name} for temporal info")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with project {project_name}: {e}")
+                    # Continue execution as it might already be initialized
+
             try:
                 image = ee.Image(dataset_id)
                 date = image.get('system:time_start').getInfo()
@@ -417,6 +664,8 @@ class GEEService:
             }
         except Exception as e:
             print(f"Error getting temporal info: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'start_date': None,
                 'end_date': None,
@@ -635,20 +884,20 @@ class GEEService:
                 print("Dataset is a single image, date range validation not needed")
                 return True
 
-        try:
-            dataset = ee.ImageCollection(dataset_id)
-            dates = dataset.aggregate_array('system:time_start').getInfo()
+            try:
+                dataset = ee.ImageCollection(dataset_id)
+                dates = dataset.aggregate_array('system:time_start').getInfo()
 
                 if not dates or len(dates) == 0:
                     print(
                         "No dates found in dataset, assuming date validation is not applicable")
                     return True
 
-            dataset_start = datetime.fromtimestamp(min(dates) / 1000)
-            dataset_end = datetime.fromtimestamp(max(dates) / 1000)
+                dataset_start = datetime.fromtimestamp(min(dates) / 1000)
+                dataset_end = datetime.fromtimestamp(max(dates) / 1000)
 
-            selected_start = datetime.strptime(start_date, '%Y-%m-%d')
-            selected_end = datetime.strptime(end_date, '%Y-%m-%d')
+                selected_start = datetime.strptime(start_date, '%Y-%m-%d')
+                selected_end = datetime.strptime(end_date, '%Y-%m-%d')
 
                 print(f"Dataset date range: {dataset_start} to {dataset_end}")
                 print(
@@ -679,10 +928,26 @@ class GEEService:
         variable: str,
         region: str,
         export_format: str = 'GeoTIFF',
-        scale: int = 1000
+        scale: int = 1000,
+        folder_name: str = 'GEE-Downloads',
+        project_name: str = None
     ) -> Dict[str, Any]:
         """Generate a URL for direct download of the selected dataset"""
         try:
+            print(
+                f"\n=== Getting download URL for {dataset_id} with project {project_name} ===")
+
+            # Ensure Earth Engine is initialized with the correct project ID
+            if project_name:
+                try:
+                    ee.Initialize(project=project_name)
+                    print(
+                        f"Re-initialized Earth Engine with project ID: {project_name}")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with project {project_name}: {e}")
+                    # Continue execution as it might already be initialized
+
             # Prepare image directly without checking dataset access first
             try:
                 # Try as image first
@@ -706,9 +971,18 @@ class GEEService:
                     dataset_type = 'IMAGE_COLLECTION'
 
                 # Process the region
-                region_geom = geojson.loads(region)
-                ee_geometry = ee.Geometry(
-                    region_geom['features'][0]['geometry'])
+                try:
+                    # If region is already a JSON string
+                    if isinstance(region, str):
+                        region_geom = geojson.loads(region)
+                    else:
+                        region_geom = region
+
+                    ee_geometry = ee.Geometry(
+                        region_geom['features'][0]['geometry'])
+                except Exception as e:
+                    print(f"Error processing region: {e}")
+                    return {'error': f'Invalid region format: {str(e)}'}
 
                 # Create filename
                 if isinstance(dataset_id, str) and '/' in dataset_id:
@@ -731,7 +1005,8 @@ class GEEService:
                 return {
                     'success': True,
                     'url': url,
-                    'filename': f'{output_name}.{export_format.lower()}'
+                    'filename': f'{output_name}.{export_format.lower()}',
+                    'folder': folder_name
                 }
 
             except Exception as e:
@@ -751,9 +1026,28 @@ class GEEService:
             return {'error': str(e)}
 
     @staticmethod
-    def check_dataset_access(dataset_id: str) -> Dict[str, Any]:
+    def check_dataset_access(dataset_id: str, project_name: str = None) -> Dict[str, Any]:
         """Check if the user has permission to access the specified dataset"""
         try:
+            # Ensure Earth Engine is initialized with the correct project ID
+            if project_name:
+                try:
+                    ee.Initialize(project=project_name)
+                    print(
+                        f"Re-initialized Earth Engine with project ID: {project_name} for dataset access check")
+                except Exception as e:
+                    print(
+                        f"Error initializing Earth Engine with project {project_name}: {e}")
+                    error_msg = str(e)
+                    if "Permission denied" in error_msg or "not found" in error_msg or "does not have required permission" in error_msg:
+                        return {
+                            'success': False,
+                            'error': 'Project ID error',
+                            'error_type': 'permission',
+                            'message': f'Permission error: Caller does not have required permission to use project {project_name}. Please check that you are using the correct project ID.'
+                        }
+                    # Continue execution as it might already be initialized
+
             # Try different approaches to access the dataset
             # First attempt: Try to load as an Image
             try:
@@ -790,7 +1084,7 @@ class GEEService:
                     'success': False,
                     'error': 'Permission denied',
                     'error_type': 'permission',
-                    'message': f'Caller does not have required permission to use this dataset. Error: {error_msg}'
+                    'message': f'Permission error: Caller does not have required permission to use this dataset. Error: {error_msg}'
                 }
             else:
                 return {

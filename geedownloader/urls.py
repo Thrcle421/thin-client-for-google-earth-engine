@@ -7,6 +7,7 @@ urlpatterns = [
     path('start-auth/', views.start_auth, name='start_auth'),
     path('check-auth-status/', views.check_auth_status, name='check_auth_status'),
     path('auth_modal/', views.auth_modal_view, name='auth_modal'),
+    path('reinitialize-ee/', views.reinitialize_ee, name='reinitialize_ee'),
 
     # Dataset routes
     path('catalog/', views.dataset_catalog, name='dataset_catalog'),
@@ -24,6 +25,8 @@ urlpatterns = [
     path('download-local/', views.download_local, name='download_local'),
     path('task-status/<str:task_id>/',
          views.get_task_status, name='get_task_status'),
+    path('ee-download-to-drive/', views.ee_download_to_drive,
+         name='ee_download_to_drive'),
 
     # New API routes
     path('api/tags/', views.get_tags, name='get_tags'),
