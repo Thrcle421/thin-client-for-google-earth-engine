@@ -19,9 +19,54 @@ cd earthenginedemo
 
 2. Create a virtual environment:
 
+There are several ways to create a Python virtual environment depending on your operating system and preferences:
+
+### Using venv (built-in Python module)
+
 ```bash
+# Create the virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows, use: venv\Scripts\activate
+
+# Activate the virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS and Linux:
+source venv/bin/activate
+```
+
+### Using conda (if you have Anaconda or Miniconda installed)
+
+```bash
+# Create the virtual environment
+conda create -n earthengine-env python=3.8
+
+# Activate the virtual environment
+# On Windows, macOS, and Linux:
+conda activate earthengine-env
+```
+
+### Using virtualenv (requires installation)
+
+```bash
+# Install virtualenv if not already installed
+pip install virtualenv
+
+# Create the virtual environment
+virtualenv venv
+
+# Activate the virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS and Linux:
+source venv/bin/activate
+```
+
+To deactivate the virtual environment when you're done, simply run:
+
+```bash
+deactivate  # For venv and virtualenv
+# OR
+conda deactivate  # For conda environments
 ```
 
 3. Install dependencies:
@@ -30,15 +75,16 @@ source venv/bin/activate  # On Windows, use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Set up the database:
+4. Set up the database and load data:
 
 ```bash
+# Step 1: Create database migrations
+python manage.py makemigrations
+
+# Step 2: Apply migrations to the database
 python manage.py migrate
-```
 
-5. Load dataset catalog:
-
-```bash
+# Step 3: Load Earth Engine dataset catalog
 python manage.py load_gee_catalog
 ```
 
@@ -67,4 +113,3 @@ Start the development server:
 ```bash
 python manage.py runserver
 ```
-
