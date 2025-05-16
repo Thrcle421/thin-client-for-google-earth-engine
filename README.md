@@ -13,8 +13,8 @@ A Django web application for browsing, searching, and downloading data from Goog
 1. Clone the repository:
 
 ```bash
-git clone git@github.com:Thrcle421/thin-client-for-google-earth-engine.git
-cd earthenginedemo
+git clone https://github.com/Thrcle421/thin-client-for-google-earth-engine.git
+cd thin-client-for-google-earth-engine
 ```
 
 2. Create a virtual environment:
