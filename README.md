@@ -38,7 +38,7 @@ source venv/bin/activate
 
 ```bash
 # Create the virtual environment
-conda create -n earthengine-env python=3.8
+conda create -n earthengine-env python=3.12.4
 
 # Activate the virtual environment
 # On Windows, macOS, and Linux:
