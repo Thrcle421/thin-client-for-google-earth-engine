@@ -4,7 +4,7 @@ A Django web application for browsing, searching, and downloading data from Goog
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.12.4
 - Google Earth Engine account with authentication
 - Google Cloud Project with Earth Engine API enabled
 
