@@ -948,16 +948,37 @@ class GEEService:
                         f"Error initializing Earth Engine with project {project_name}: {e}")
                     # Continue execution as it might already be initialized
 
-            # Prepare image directly without checking dataset access first
+            # First check what kind of dataset we're dealing with
             try:
-                # Try as image first
-                image = None
+                dataset_type = None
+
+                # Check if dataset is an ImageCollection first
                 try:
-                    image = ee.Image(dataset_id).select(variable)
-                    dataset_type = 'IMAGE'
-                except Exception:
-                    # Try as image collection
                     dataset = ee.ImageCollection(dataset_id)
+                    # Test if we can access it as an ImageCollection
+                    size_check = dataset.size().getInfo()
+                    dataset_type = 'IMAGE_COLLECTION'
+                    print(
+                        f"Dataset is an ImageCollection with {size_check} images")
+                except Exception as coll_error:
+                    print(f"Not an ImageCollection or error: {coll_error}")
+                    # If not an ImageCollection, try as an Image
+                    try:
+                        image_test = ee.Image(dataset_id)
+                        # Test if we can access it as an Image
+                        _ = image_test.bandNames().getInfo()
+                        dataset_type = 'IMAGE'
+                        print(f"Dataset is a single Image")
+                    except Exception as img_error:
+                        print(f"Not an Image either: {img_error}")
+                        return {'error': f'Unable to access dataset as Image or ImageCollection: {img_error}'}
+
+                # Now process based on the dataset type
+                image = None
+                if dataset_type == 'IMAGE':
+                    image = ee.Image(dataset_id).select(variable)
+                elif dataset_type == 'IMAGE_COLLECTION':
+                    # Process as image collection
                     filtered_data = dataset.filterDate(
                         start_date, end_date).select(variable)
 
@@ -968,7 +989,8 @@ class GEEService:
 
                     # Get the mean image
                     image = filtered_data.mean()
-                    dataset_type = 'IMAGE_COLLECTION'
+                else:
+                    return {'error': 'Unknown dataset type'}
 
                 # Process the region
                 try:
