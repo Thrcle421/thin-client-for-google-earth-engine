@@ -2,6 +2,23 @@
 
 A Django web application for browsing, searching, and downloading data from Google Earth Engine.
 
+## 📚 Documentation
+
+For detailed information about the project architecture, file structure, and implementation details, see:
+
+**[📖 Comprehensive Project Documentation](COMPREHENSIVE_PROJECT_DOCUMENTATION.md)**
+
+This comprehensive guide includes:
+
+- Complete project overview and system architecture
+- Detailed directory structure analysis
+- Critical files breakdown and code analysis
+- Configuration and deployment information
+- Database design and API documentation
+- Frontend and backend implementation details
+
+---
+
 ## Prerequisites
 
 - Python 3.12.4
