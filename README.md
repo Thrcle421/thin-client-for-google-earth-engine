@@ -38,22 +38,37 @@ cd thin-client-for-google-earth-engine
 
 There are several ways to create a Python virtual environment depending on your operating system and preferences:
 
-### Using venv (built-in Python module)
-
-```bash
-# Create the virtual environment
-python -m venv venv
-
-# Activate the virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS and Linux:
-source venv/bin/activate
-```
-
 ### Using conda (if you have Anaconda or Miniconda installed)
 
 If Anaconda is not installed, you can install it with these commands:
+
+#### For Windows:
+
+```bash
+# Download Anaconda installer for Windows
+# Visit https://www.anaconda.com/download and download the Windows installer
+# Or download directly using PowerShell:
+Invoke-WebRequest -Uri "https://repo.anaconda.com/archive/Anaconda3-2023.09-0-Windows-x86_64.exe" -OutFile "Anaconda3-installer.exe"
+
+# Run the installer (you can also double-click the downloaded file)
+# For silent installation (optional):
+Start-Process -FilePath ".\Anaconda3-installer.exe" -ArgumentList "/S" -Wait
+
+# Add Anaconda to PATH (if not done during installation)
+# Open a new PowerShell/Command Prompt window and verify installation
+conda --version && python --version
+```
+
+**Alternative method for Windows:**
+
+1. Visit [Anaconda Download Page](https://www.anaconda.com/download)
+2. Download the Windows installer (Anaconda3-2023.09-0-Windows-x86_64.exe)
+3. Run the installer and follow the installation wizard
+4. During installation, check "Add Anaconda to PATH" option
+5. Open a new Command Prompt or PowerShell window
+6. Verify installation: `conda --version && python --version`
+
+#### For macOS:
 
 ```bash
 # Download Anaconda installer
@@ -81,30 +96,6 @@ conda create -n earthengine-env python=3.12.4
 # Activate the virtual environment
 # On Windows, macOS, and Linux:
 conda activate earthengine-env
-```
-
-### Using virtualenv (requires installation)
-
-```bash
-# Install virtualenv if not already installed
-pip install virtualenv
-
-# Create the virtual environment
-virtualenv venv
-
-# Activate the virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS and Linux:
-source venv/bin/activate
-```
-
-To deactivate the virtual environment when you're done, simply run:
-
-```bash
-deactivate  # For venv and virtualenv
-# OR
-conda deactivate  # For conda environments
 ```
 
 3. Install dependencies:
@@ -144,6 +135,10 @@ earthengine authenticate
 
 Visit https://code.earthengine.google.com/ and find your project ID in the settings.
 
+![Project ID Location](ID.png)
+
+The red box in the image above shows where to find your project ID in the Google Earth Engine Code Editor settings.
+
 ## Running the Application
 
 Start the development server:
@@ -161,4 +156,4 @@ You need to configure proper permissions for your Google Earth Engine service ac
 3. Add the necessary permissions as shown in the reference image (`image.png` in the project root)
 4. Ensure your service account has access to the Earth Engine API
 
-![Required IAM Permissions](image.png)
+![Required IAM Permissions](IAM.png)
