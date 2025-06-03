@@ -53,6 +53,27 @@ source venv/bin/activate
 
 ### Using conda (if you have Anaconda or Miniconda installed)
 
+If Anaconda is not installed, you can install it with these commands:
+
+```bash
+# Download Anaconda installer
+curl -O https://repo.anaconda.com/archive/Anaconda3-2023.09-0-MacOSX-x86_64.sh
+
+# Install Anaconda (non-interactive mode)
+bash Anaconda3-2023.09-0-MacOSX-x86_64.sh -b
+
+# Initialize conda for zsh
+~/anaconda3/bin/conda init zsh
+
+# Reload shell configuration
+source ~/.zshrc
+
+# Verify installation
+conda --version && python --version
+```
+
+Once Anaconda is installed:
+
 ```bash
 # Create the virtual environment
 conda create -n earthengine-env python=3.12.4
@@ -130,3 +151,14 @@ Start the development server:
 ```bash
 python manage.py runserver
 ```
+
+## Google Cloud IAM Permissions
+
+You need to configure proper permissions for your Google Earth Engine service account:
+
+1. Visit the [Google Cloud IAM Admin console](https://console.cloud.google.com/iam-admin/)
+2. Select your project
+3. Add the necessary permissions as shown in the reference image (`image.png` in the project root)
+4. Ensure your service account has access to the Earth Engine API
+
+![Required IAM Permissions](image.png)
