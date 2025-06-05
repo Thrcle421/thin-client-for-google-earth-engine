@@ -21,24 +21,7 @@ This comprehensive guide includes:
 
 ## Prerequisites
 
-- Python 3.12.4
-- Google Earth Engine account with authentication
-- Google Cloud Project with Earth Engine API enabled
-
-## Installation
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/Thrcle421/thin-client-for-google-earth-engine.git
-cd thin-client-for-google-earth-engine
-```
-
-2. Create a virtual environment:
-
-There are several ways to create a Python virtual environment depending on your operating system and preferences:
-
-### Using conda (if you have Anaconda or Miniconda installed)
+### 1. Using conda (if you have Anaconda or Miniconda installed)
 
 If Anaconda is not installed, you can install it with these commands:
 
@@ -98,26 +81,37 @@ conda create -n earthengine-env python=3.12.4
 conda activate earthengine-env
 ```
 
-3. Install dependencies:
+### 2. Google Earth Engine Authentication
 
-```bash
-pip install -r requirements.txt
-```
+#### Setting up Google Earth Engine with Google Cloud Project
 
-4. Set up the database and load data:
+Before authenticating with Earth Engine, you need to set up a Google Cloud Project:
 
-```bash
-# Step 1: Create database migrations
-python manage.py makemigrations
+1. Create a Google Cloud Project:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Click "Create Project" and give it a name
+   - Note your Project ID as you'll need it later
 
-# Step 2: Apply migrations to the database
-python manage.py migrate
+2. Enable the Earth Engine API:
+   - In your Google Cloud Project, go to "APIs & Services" > "Library"
+   - Search for "Earth Engine API"
+   - Click "Enable"
 
-# Step 3: Load Earth Engine dataset catalog
-python manage.py load_gee_catalog
-```
+3. Create Service Account (for programmatic access):
+   - Go to "IAM & Admin" > "Service Accounts"
+   - Click "Create Service Account"
+   - Give it a name and grant necessary permissions
+   - Create a key (JSON format) and download it
+   - Keep this key secure as it provides access to your GEE resources
 
-## Google Earth Engine Authentication
+4. Register for Earth Engine:
+   - Visit [Earth Engine Sign Up Page](https://signup.earthengine.google.com/)
+   - Complete the registration form
+   - Select the same Google Cloud Project you created earlier
+
+For a detailed visual guide on this process, see this [YouTube tutorial](https://www.youtube.com/watch?v=fiqeSRzG_8k).
+
+#### Authenticate with Earth Engine
 
 1. Install the Earth Engine CLI:
 
@@ -139,15 +133,7 @@ Visit https://code.earthengine.google.com/ and find your project ID in the setti
 
 The red box in the image above shows where to find your project ID in the Google Earth Engine Code Editor settings.
 
-## Running the Application
-
-Start the development server:
-
-```bash
-python manage.py runserver
-```
-
-## Google Cloud IAM Permissions
+### 3. Google Cloud IAM Permissions
 
 You need to configure proper permissions for your Google Earth Engine service account:
 
@@ -157,3 +143,39 @@ You need to configure proper permissions for your Google Earth Engine service ac
 4. Ensure your service account has access to the Earth Engine API
 
 ![Required IAM Permissions](IAM.png)
+
+## Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/Thrcle421/thin-client-for-google-earth-engine.git
+cd thin-client-for-google-earth-engine
+```
+
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Set up the database and load data:
+
+```bash
+# Step 1: Create database migrations
+python manage.py makemigrations
+
+# Step 2: Apply migrations to the database
+python manage.py migrate
+
+# Step 3: Load Earth Engine dataset catalog
+python manage.py load_gee_catalog
+```
+
+## Running the Application
+
+Start the development server:
+
+```bash
+python manage.py runserver
+```
