@@ -98,11 +98,8 @@ Before authenticating with Earth Engine, you need to set up a Google Cloud Proje
    - Click "Enable"
 
 3. Create Service Account (for programmatic access):
-   - Go to "IAM & Admin" > "Service Accounts"
-   - Click "Create Service Account"
-   - Give it a name and grant necessary permissions
-   - Create a key (JSON format) and download it
-   - Keep this key secure as it provides access to your GEE resources
+   - Go to "IAM & Admin"
+   - Add new roles in Security insights
 
 4. Register for Earth Engine:
    - Visit [Earth Engine Sign Up Page](https://signup.earthengine.google.com/)
