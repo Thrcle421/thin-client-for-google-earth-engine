@@ -97,15 +97,6 @@ Before authenticating with Earth Engine, you need to set up a Google Cloud Proje
    - Search for "Earth Engine API"
    - Click "Enable"
 
-3. Create Service Account (for programmatic access):
-   - Go to "IAM & Admin"
-   - Add new roles in Security insights
-
-4. Register for Earth Engine:
-   - Visit [Earth Engine Sign Up Page](https://signup.earthengine.google.com/)
-   - Complete the registration form
-   - Select the same Google Cloud Project you created earlier
-
 For a detailed visual guide on this process, see this [YouTube tutorial](https://www.youtube.com/watch?v=fiqeSRzG_8k).
 
 #### Authenticate with Earth Engine
